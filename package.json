@@ -62,7 +62,7 @@
     "registry": "https://registry.npmjs.org/"
   },
   "devDependencies": {
-    "@commitlint/config-conventional": "^20.0.0",
+    "@commitlint/config-conventional": "^20.2.0",
     "@evilmartians/lefthook": "^2.0.0",
     "@react-native/eslint-config": "^0.81.1",
     "@release-it/conventional-changelog": "^10.0.2",
@@ -70,7 +70,7 @@
     "@types/react": "19.2.6",
     "@typescript-eslint/eslint-plugin": "^8.48.0",
     "@typescript-eslint/parser": "^8.48.0",
-    "commitlint": "^20.0.0",
+    "commitlint": "^20.2.0",
     "del-cli": "^6.0.0",
     "eslint": "^9.35.0",
     "eslint-config-prettier": "^10.1.8",
