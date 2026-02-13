@@ -1,7 +1,15 @@
 
 appId: "vgscollectreactnative.example" 
 ---
-- launchApp
+- launchApp:
+    clearState: true
+- tapOn:
+    text: "Collect Card Data"
+    optional: true
+- tapOn:
+    point: "50%,17%"
+    optional: true
+- waitForAnimationToEnd
 - tapOn:
     id: "card_holder"
 - inputText: "John B"
