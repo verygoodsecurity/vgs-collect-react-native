@@ -96,7 +96,7 @@ class APIHostnameValidator {
    * Normalizes input into a hostname string.
    * Accepts raw hostnames and full URLs; returns `null` on parse failure.
    */
-  private static normalizeHostname(url: string): string | null {
+  static normalizeHostname(url: string): string | null {
     if (!/^https?:\/\//i.test(url)) {
       url = `https://${url}`;
     }
