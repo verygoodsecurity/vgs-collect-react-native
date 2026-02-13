@@ -18,6 +18,7 @@ import {
   getTypeAnalyticsString,
   type VGSInputType,
 } from '../components/VGSInputType';
+import { CardManagementAPIPath } from './CardManagementAPI';
 import { getVaultAPIPath, VaultAPIVersion } from './VaultAPI';
 
 type FieldUpdateCallback = (config: {
@@ -84,6 +85,7 @@ class VGSCollect {
    * Host becomes `<tenantId>-<routeId>.<environment>.verygoodproxy.com`.
    *
    * @param routeId - Route identifier configured in Vault.
+   *                  Allowed symbols: letters, numbers and `-`.
    * @throws {VGSError} If `routeId` is invalid.
    */
   public setRouteId(routeId: string) {
@@ -113,17 +115,18 @@ class VGSCollect {
       await this.cnameValidationPromise;
     }
 
+    const normalizedCname = APIHostnameValidator.normalizeHostname(cname);
     this.isCnameValidating = true;
     this.cnameValidationPromise = new Promise<boolean>((resolve, reject) => {
       APIHostnameValidator.validateCustomHostname(cname, this.tenantId)
         .then((isValid) => {
           this.isCnameValidating = false;
-          this.cname = isValid ? cname : undefined;
+          this.cname = isValid ? normalizedCname ?? undefined : undefined;
           this.analyticsClient.trackFormEvent(
             this.formAnalyticsDetails,
             AnalyticsEventType.HostnameValidation,
             isValid ? AnalyticEventStatus.Success : AnalyticEventStatus.Failed,
-            { hostname: cname }
+            { hostname: normalizedCname ?? cname }
           );
           resolve(isValid);
         })
@@ -132,7 +135,7 @@ class VGSCollect {
             this.formAnalyticsDetails,
             AnalyticsEventType.HostnameValidation,
             AnalyticEventStatus.Failed,
-            { hostname: cname }
+            { hostname: normalizedCname ?? cname }
           );
           this.isCnameValidating = false;
           this.cname = undefined;
@@ -247,15 +250,14 @@ class VGSCollect {
     }
   }
 
-  private buildCmpAPIUrl(path: string): string {
+  private buildCmpAPIUrl(path: CardManagementAPIPath): string {
     const environment = this.environment.toLowerCase();
     const baseUrl =
       environment === 'sandbox'
         ? 'https://sandbox.vgsapi.com'
         : 'https://vgsapi.com';
-    const formattedPath = path.startsWith('/') ? path : `/${path}`;
 
-    return `${baseUrl}${formattedPath}`;
+    return `${baseUrl}${path}`;
   }
 
   /**
@@ -281,7 +283,7 @@ class VGSCollect {
     // Merge non-input extraData with the wrapped input data.
     const submitData = { ...cmpData, ...extraData };
     // get the URL for the cmp API
-    const url = this.buildCmpAPIUrl(`cards`);
+    const url = this.buildCmpAPIUrl(CardManagementAPIPath.Cards);
     return this.submitDataToServer(url, 'POST', submitData, { upstream: 'cmp' });
   }
 
@@ -586,19 +588,17 @@ class VGSCollect {
 
   BASE_VAULT_URL = 'verygoodproxy.com';
   private buildUrl(baseDomain: string, path: string = ''): string {
-    // Sanitize the path to prevent injection
-    const sanitizedPath = path
-      .replace(/[^\w\-\/]/g, '')
-      .replace(/\/{2,}/g, '/');
-
     const baseUrl = this.cname
       ? `https://${this.cname.replace(/\/+$/, '')}`
       : `https://${this.getBaseUrl(baseDomain)}`;
 
-    const resultUrl = `${baseUrl}/${sanitizedPath.replace(/^\/+/, '')}`;
+    const normalizedPath = path.replace(/^\/+/, '');
+    const resultUrl = `${baseUrl}/${normalizedPath}`;
+    const parsedUrl = this.parseURL(resultUrl);
 
-    if (this.isValidURL(resultUrl)) {
-      return resultUrl;
+    if (parsedUrl) {
+      // Return a canonical URL so reserved chars are encoded, not stripped.
+      return parsedUrl.toString();
     } else {
       throw new VGSError(VGSErrorCode.InvalidConfigurationURL, 'Invalid URL', {
         URL: resultUrl,
@@ -614,11 +614,11 @@ class VGSCollect {
     return `${this.tenantId}.${this.environment}.${defaultBaseDomain}`;
   }
 
-  private isValidURL(string: string) {
+  private parseURL(string: string): URL | null {
     try {
-      return new URL(string) ? true : false;
+      return new URL(string);
     } catch (error) {
-      return false;
+      return null;
     }
   }
 
@@ -770,7 +770,13 @@ class VGSCollect {
   }
 
   private validateRouteId(routeId: string) {
-    if (!routeId || typeof routeId !== 'string') {
+    const routeIdPattern = /^(?=.*[a-z0-9])[a-z0-9-]+$/i;
+
+    if (
+      !routeId ||
+      typeof routeId !== 'string' ||
+      !routeIdPattern.test(routeId)
+    ) {
       throw new VGSError(
         VGSErrorCode.InvalidVaultConfiguration,
         'VGSCollect: Invalid routeId error'

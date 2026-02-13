@@ -10,6 +10,14 @@ jest.mock('../../utils/url/APIHostnameValidator', () => ({
   __esModule: true,
   default: {
     validateCustomHostname: jest.fn(),
+    normalizeHostname: jest.fn((url: string) => {
+      const withScheme = /^https?:\/\//i.test(url) ? url : `https://${url}`;
+      try {
+        return new URL(withScheme).hostname;
+      } catch (error) {
+        return null;
+      }
+    }),
   },
 }));
 
@@ -37,17 +45,25 @@ describe('VGSCollect', () => {
   const environment = 'sandbox';
 
   describe('setRouteId', () => {
-    it('should set the routeId when a valid string is provided', () => {
+    it('should set the routeId when letters, numbers and dashes are provided', () => {
       const collect = new VGSCollect(tenantId, environment);
-      collect.setRouteId('route123');
+      const routeId = 'ROUTE-ABC-123';
+      collect.setRouteId(routeId);
       // Access private property via casting
-      expect((collect as any).routeId).toBe('route123');
+      expect((collect as any).routeId).toBe(routeId);
     });
 
     it('should throw an error if routeId is not a string', () => {
       const collect = new VGSCollect(tenantId, environment);
       // @ts-ignore: Passing a non-string to force error
       expect(() => collect.setRouteId(123)).toThrow(
+        'VGSCollect: Invalid routeId error'
+      );
+    });
+
+    it('should throw an error if routeId contains unsupported symbols', () => {
+      const collect = new VGSCollect(tenantId, environment);
+      expect(() => collect.setRouteId('route_123')).toThrow(
         'VGSCollect: Invalid routeId error'
       );
     });
@@ -74,6 +90,15 @@ describe('VGSCollect', () => {
         'example.com',
         tenantId
       );
+      expect((collect as any).cname).toBe('example.com');
+    });
+
+    it('should store normalized hostname for URL-style cname input', async () => {
+      (
+        APIHostnameValidator.validateCustomHostname as jest.Mock
+      ).mockResolvedValue(true);
+      const collect = new VGSCollect(tenantId, environment);
+      await collect.setCname('https://example.com/path?x=1');
       expect((collect as any).cname).toBe('example.com');
     });
 
@@ -105,11 +130,12 @@ describe('VGSCollect', () => {
     it('should build URL using default base when no cname is provided', () => {
       const collect = new VGSCollect(tenantId, environment);
       // Set a routeId so that baseUrl uses tenantId-routeId...
-      collect.setRouteId('route1');
+      const routeId = 'ROUTE-ABC-123';
+      collect.setRouteId(routeId);
       const buildUrl = (collect as any).buildUrl.bind(collect);
       const url = buildUrl(collect.BASE_VAULT_URL, '/my/path');
       expect(url).toBe(
-        'https://tenant-route1.sandbox.verygoodproxy.com/my/path'
+        `https://tenant-${routeId.toLowerCase()}.sandbox.verygoodproxy.com/my/path`
       );
     });
 
@@ -123,13 +149,24 @@ describe('VGSCollect', () => {
       expect(url).toBe('https://example.com/another/path');
     });
 
-    it('should sanitize unwanted characters from the path', () => {
+    it('should preserve query params and dots in path', () => {
       const collect = new VGSCollect(tenantId, environment);
       const buildUrl = (collect as any).buildUrl.bind(collect);
-      // Characters like "<" and ">" should be removed.
+      const url = buildUrl(
+        collect.BASE_VAULT_URL,
+        '/v1/cards/123.json?foo=1&bar=2'
+      );
+      expect(url).toBe(
+        `https://${tenantId}.${environment}.verygoodproxy.com/v1/cards/123.json?foo=1&bar=2`
+      );
+    });
+
+    it('should encode reserved path characters instead of stripping them', () => {
+      const collect = new VGSCollect(tenantId, environment);
+      const buildUrl = (collect as any).buildUrl.bind(collect);
       const url = buildUrl(collect.BASE_VAULT_URL, '/my/<script>path');
       expect(url).toBe(
-        `https://${tenantId}.${environment}.verygoodproxy.com/my/scriptpath`
+        `https://${tenantId}.${environment}.verygoodproxy.com/my/%3Cscript%3Epath`
       );
     });
   });

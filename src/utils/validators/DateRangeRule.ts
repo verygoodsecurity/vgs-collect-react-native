@@ -16,7 +16,7 @@ export class VGSDate implements VGSDateInterface {
 
   /**
    * Creates a new VGSDate instance.
-   * @param day - The day of the month.
+   * @param date - The day of the month.
    * @param month - The month of the year.
    * @param year - The year.
    */
