@@ -51,6 +51,7 @@ You do NOT call `registerField` directly—components do. Use component props:
 - `type`: One of supported input types (see below).
 - `mask`: Optional custom mask (use with caution; defaults chosen for security/usability).
 - `validationRules`: Replace defaults entirely when supplied (must re-provide any needed built-ins like Luhn or expiration date rules).
+- `maxLength`: Optional max character count passed to the underlying React Native TextInput.
 - `onStateChange`: Callback receiving `VGSTextInputState` for UI validity feedback (never persist raw values from state).
 
 Components:
