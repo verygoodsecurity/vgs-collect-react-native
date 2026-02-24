@@ -1,0 +1,66 @@
+name: Create Release Tag
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - package.json
+
+jobs:
+  create-release-tag:
+    name: Create v<package.json.version> Tag
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          fetch-depth: 0
+
+      - name: Resolve release tag from package.json
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="$(node -e "const pkg=require('./package.json'); process.stdout.write(pkg.version);")"
+          if [ -z "$VERSION" ]; then
+            echo "::error::package.json version is empty"
+            exit 1
+          fi
+
+          TAG="v${VERSION}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Resolved release tag: $TAG"
+
+      - name: Skip when tag already exists on origin
+        id: existing
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.version.outputs.tag }}"
+          REMOTE_SHA="$(git ls-remote --tags --refs origin "refs/tags/${TAG}" | awk '{print $1}')"
+
+          if [ -n "$REMOTE_SHA" ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "remote_sha=$REMOTE_SHA" >> "$GITHUB_OUTPUT"
+            echo "::notice::Tag ${TAG} already exists on origin at ${REMOTE_SHA}. No action needed."
+            exit 0
+          fi
+
+          echo "exists=false" >> "$GITHUB_OUTPUT"
+
+      - name: Create and push tag
+        if: steps.existing.outputs.exists == 'false'
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.version.outputs.tag }}"
+          TARGET_SHA="${GITHUB_SHA}"
+
+          git tag "$TAG" "$TARGET_SHA"
+          git push origin "refs/tags/${TAG}"
+          echo "Created and pushed ${TAG} -> ${TARGET_SHA}"
