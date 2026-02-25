@@ -84,6 +84,10 @@ export interface VGSTextInputProps {
    */
   placeholder?: string;
   /**
+   * Maximum number of characters allowed in the input.
+   */
+  maxLength?: number;
+  /**
    * Color of the placeholder text. If not provided, React Native default is used.
    */
   placeholderTextColor?: string;
@@ -151,6 +155,24 @@ export interface VGSTextInputRef {
 }
 
 /**
+ * Computes the effective maxLength for a masked input.
+ * Ensures native input cannot exceed the visible mask length,
+ * which avoids a transient over-limit character flicker.
+ */
+export const resolveEffectiveMaxLength = (
+  maxLength?: number,
+  mask?: string
+): number | undefined => {
+  if (!mask) return maxLength;
+
+  if (typeof maxLength === 'number') {
+    return Math.min(maxLength, mask.length);
+  }
+
+  return mask.length;
+};
+
+/**
  * Secure text input for collecting sensitive data with VGS.
  *
  * Behavior:
@@ -166,6 +188,7 @@ export const VGSTextInputBase = forwardRef<VGSTextInputRef, VGSTextInputProps>((
     type = 'text', // default field type if not provided
     onStateChange,
     placeholder,
+    maxLength,
     placeholderTextColor,
     divider,
     secureTextEntry = false,
@@ -211,6 +234,7 @@ export const VGSTextInputBase = forwardRef<VGSTextInputRef, VGSTextInputProps>((
     validationErrors: [],
     fieldName,
   });
+  const effectiveMaxLength = resolveEffectiveMaxLength(maxLength, currentMask);
 
   const textRef = React.useRef<string>(text);
 
@@ -380,6 +404,7 @@ export const VGSTextInputBase = forwardRef<VGSTextInputRef, VGSTextInputProps>((
         onFocus={handleFocus}
         onBlur={handleBlur}
         placeholder={placeholder}
+        maxLength={effectiveMaxLength}
         // Always provide a concrete placeholderTextColor to prevent native view
         // from keeping a previous instance's color when this prop is omitted.
         placeholderTextColor={placeholderTextColor ?? DEFAULT_PLACEHOLDER_COLOR}
