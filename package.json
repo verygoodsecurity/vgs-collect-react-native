@@ -50,14 +50,14 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/verygoodsecurity/vgs-collect-react-native-public.git"
+    "url": "git+https://github.com/verygoodsecurity/vgs-collect-react-native.git"
   },
   "author": "Dmytro Khludkov <dmytro.khludkov@vgs.io> (https://github.com/dmytrokhl)",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/verygoodsecurity/vgs-collect-react-native-public/issues"
+    "url": "https://github.com/verygoodsecurity/vgs-collect-react-native/issues"
   },
-  "homepage": "https://github.com/verygoodsecurity/vgs-collect-react-native-public#readme",
+  "homepage": "https://github.com/verygoodsecurity/vgs-collect-react-native#readme",
   "publishConfig": {
     "registry": "https://registry.npmjs.org/"
   },
