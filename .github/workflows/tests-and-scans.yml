@@ -328,7 +328,9 @@ jobs:
           sleep 15
 
           # Verify app is still running after launch to avoid SpringBoard false positives.
-          if ! xcrun simctl spawn "$SIMULATOR_UDID" launchctl list | grep -q "$APP_BUNDLE_ID"; then
+          LAUNCHCTL_OUTPUT="$RUNNER_TEMP/launchctl-list.txt"
+          xcrun simctl spawn "$SIMULATOR_UDID" launchctl list > "$LAUNCHCTL_OUTPUT"
+          if ! grep -q "$APP_BUNDLE_ID" "$LAUNCHCTL_OUTPUT"; then
             APP_PROCESS_NAME="$(basename "$APP_PATH" .app)"
             echo "::error::App ($APP_BUNDLE_ID) is not running after launch. Dumping recent simulator logs."
             xcrun simctl spawn "$SIMULATOR_UDID" log show --last 3m --style compact --predicate "process == \"$APP_PROCESS_NAME\" OR eventMessage CONTAINS[c] \"$APP_BUNDLE_ID\"" | tail -n 200 || true
