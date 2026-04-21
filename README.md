@@ -2,7 +2,7 @@
   <a href="https://www.verygoodsecurity.com/" rel="nofollow">
     <img src="https://avatars0.githubusercontent.com/u/17788525" width="128" alt="VGS Logo">
   </a>
-  <h3 align="center">VGS Collect React Native SDK</h3>
+  <h3 align="center">VGS Collect React Native Package</h3>
 
   <p align="center">
     Securely collect, tokenize, and manage sensitive data in your React Native applications with ease.
@@ -33,7 +33,7 @@
 
 ## Introduction
 
-The `@vgs/collect-react-native` SDK by Very Good Security (VGS) enables you to securely collect and manage sensitive data such as credit card information and Social Security Numbers (SSNs) within your React Native applications. Leveraging VGS's data protection infrastructure ensures that sensitive information is handled securely, simplifying compliance and enhancing user trust.
+The `@vgs/collect-react-native` package by Very Good Security (VGS) enables you to securely collect and manage sensitive data such as credit card information and Social Security Numbers (SSNs) within your React Native applications. Leveraging VGS's data protection infrastructure ensures that sensitive information is handled securely, simplifying compliance and enhancing user trust.
 
 ## Features
 
@@ -59,11 +59,29 @@ Ensure you have React Native set up in your project. If not, follow the official
 
 ## AI Agent Integration
 
-Use [`AGENTS.md`](./AGENTS.md) as the single authoritative context for autonomous coding agents integrating or maintaining this React Native SDK. It lists public APIs, security constraints, validation rules, upgrade & testing expectations.
+This repository ships a public AI skill at [`skills/vgs-collect-react-native-guide/SKILL.md`](./skills/vgs-collect-react-native-guide/SKILL.md) for teams integrating `@vgs/collect-react-native` into an app.
+
+Recommended: install the skill with `skills.sh`. This is the easiest way to give a compatible AI agent the repository-specific guidance it needs for `@vgs/collect-react-native` integrations.
+
+The installed skill bundle includes `references/AGENTS.md`, and repository root `AGENTS.md` points to that same file, so a compatible skill-aware agent receives the durable integration policy automatically as part of the skill download without maintaining two copies.
+
+What the skill is useful for:
+- choosing the correct VGS Collect flow for the request, such as proxy submission, Vault tokenization, alias creation, or card creation
+- asking a clarifying question when a card-entry request is ambiguous and the flow is not specified
+- steering non-card collection requests such as SSN or generic sensitive fields toward the correct field and tokenization APIs instead of card-specific ones
+- keeping generated guidance aligned with the installed package version when that version can be detected
+- following the integration rules in [`AGENTS.md`](./AGENTS.md) for public APIs, validation, privacy, and testing expectations automatically
+
+Install the skill with `skills.sh`:
+```bash
+npx skills add https://github.com/verygoodsecurity/vgs-collect-react-native --skill vgs-collect-react-native-guide
+```
+
+If your AI tool does not support skills yet, you can still copy [`AGENTS.md`](./AGENTS.md) into the agent context manually. That file is the authoritative integration guide for supported public APIs, security constraints, validation rules, migration expectations, and testing requirements.
 
 Minimal System Prompt Example:
 ```text
-You are an autonomous engineering agent integrating the VGS Collect React Native SDK into an existing app.
+You are an autonomous engineering agent integrating the VGS Collect React Native package into an existing app.
 Use the full contents of AGENTS.md as the authoritative policy.
 Constraints:
 - Only public exports from package root (no internal imports).
@@ -77,18 +95,6 @@ Goals:
 Return: Modified source files only. Do not commit secrets.
 ```
 
-Developer Prompt (Inline Example for a Single Task):
-```text
-Task: Add custom tokenization to include exp date split into month/year using ExpDateSeparateSerializer.
-Follow AGENTS.md sections on tokenization & serializers.
-Do not alter existing public API; add tests asserting alias keys exp_month & exp_year are returned.
-```
-
-When updating prompts for agents:
-- Always reference `AGENTS.md` explicitly (do not duplicate entire content inline).
-- Keep constraints explicit (public API, no sensitive logs, validation required).
-- Include concrete acceptance criteria (e.g., which tests must pass, which fields to add).
-
 ## Prerequisites
 You should have your organization registered at the <a href="https://dashboard.verygoodsecurity.com/dashboard/" target="_blank">VGS Dashboard</a>. A Sandbox vault is
 pre-created for you. Use the Dashboard to configure routes and begin collecting data. If you don’t have an organization yet, see the Quick Integration guides. Use your `<vaultId>` to start collecting data.
@@ -96,7 +102,7 @@ pre-created for you. Use the Dashboard to configure routes and begin collecting 
 ## Example app
 You can check our example application [here](./example/src/App.tsx). To run the example application, follow these steps:
 ``` bash
-# 1. Download SDK repository
+# 1. Download package repository
 # 2. In root folder run:
 npm install
 # 3. Navigate to example folder
@@ -108,7 +114,7 @@ npx expo start --clear
 ```
 ## Quick Start
 
-Import the SDK Components:
+Import the package components:
 ```javascript
 import { VGSCollect, VGSTextInput } from '@vgs/collect-react-native';
 ```
@@ -171,7 +177,7 @@ const handleSubmit = async () => {
 
 ## UI Inputs
 
-The SDK provides pre-built UI input components for securely collecting sensitive data. The following input components are available:
+The package provides pre-built UI input components for securely collecting sensitive data. The following input components are available:
 
 * **`VGSTextInput`:** A versatile, customizable input component. 
     * **Field Types:** You can configure the input's behavior by setting the `type` prop. 
@@ -241,11 +247,11 @@ import { NotEmptyRule, LengthRule, PatternRule } from '@vgs/collect-react-native
 />
 ```
 ## iOS Privacy Manifest
-The SDK **does not directly package or embed** the Privacy Manifest file into your iOS project. Instead, manually copy and update the privacy information from the VGS <a href="https://github.com/verygoodsecurity/vgs-collect-react-native/blob/main/PrivacyInfo.xcprivacy">Privacy Manifest file</a>. Follow the instructions in our <a href="https://www.verygoodsecurity.com/docs/vgs-collect/rn-sdk/privacy-details">documentation</a>.
+The package **does not directly embed** the Privacy Manifest file into your iOS project. Instead, manually copy and update the privacy information from the VGS <a href="https://github.com/verygoodsecurity/vgs-collect-react-native/blob/main/PrivacyInfo.xcprivacy">Privacy Manifest file</a>. Follow the instructions in our <a href="https://docs.verygoodsecurity.com/vault/developer-tools/vgs-collect/react-native-sdk">documentation</a>.
 
 
 ### Privacy
-The SDK tracks a few key metrics about feature usage to guide improvements. No personal or raw sensitive data is tracked.
+The package tracks a few key metrics about feature usage to guide improvements. No personal or raw sensitive data is tracked.
 
 You can opt-out of metrics collection via `VGSAnalyticsClient`:
 ```
@@ -253,11 +259,11 @@ VGSAnalyticsClient.getInstance().shouldCollectAnalytics = false
 ```
 
 ### Documentation
--  SDK Documentation: https://www.verygoodsecurity.com/docs/vgs-collect/rn-sdk
+-  Package Documentation: https://docs.verygoodsecurity.com/vault/developer-tools/vgs-collect/react-native-sdk
 
 ### Releases
 To follow `@vgs/collect-react-native` updates and changes, check the <a href="https://github.com/verygoodsecurity/vgs-collect-react-native/releases">releases page</a>.
 
 ## License
 
-The VGS Collect React Native SDK is released under the MIT license. See <a href="https://github.com/verygoodsecurity/vgs-collect-react-native/blob/main/LICENSE">LICENSE</a> for details.
+The VGS Collect React Native package is released under the MIT license. See <a href="https://github.com/verygoodsecurity/vgs-collect-react-native/blob/main/LICENSE">LICENSE</a> for details.
