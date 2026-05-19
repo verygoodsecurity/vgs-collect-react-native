@@ -6,20 +6,10 @@
 
 ## Authoritative Guidance Pointers
 - AGENTS: `vgs-collect-react-native/AGENTS.md`
-- Maintenance routing: `vgs-collect-react-native/.github/agents/README.md`
-- Maintenance agents: `vgs-collect-react-native/.github/agents/*.md`
+- Contributor workflow entry: `vgs-collect-react-native/.codex/agents/AGENTS.md`
+- Contributor routing: `vgs-collect-react-native/.codex/agents/README.md`
 - Repo docs: vgs-collect-react-native/README.md, vgs-collect-react-native/CONTRIBUTING.md
 - Copilot-only guidance (non-authoritative for generic agents): `vgs-collect-react-native/.github/copilot-instructions.md`
-
-## Maintenance Agent Map
-
-- Entry point: `vgs-collect-react-native/.github/agents/feature-orchestrator.md`
-- Core/submission owner: `vgs-collect-react-native/.github/agents/sdk-core-submission.md`
-- Inputs/validation owner: `vgs-collect-react-native/.github/agents/inputs-validation.md`
-- Native bridge/codegen owner: `vgs-collect-react-native/.github/agents/native-bridge-codegen.md`
-- Observability/errors owner: `vgs-collect-react-native/.github/agents/observability-errors.md`
-- Security reviewer: `vgs-collect-react-native/.github/agents/security-privacy-review.md`
-- Test owner: `vgs-collect-react-native/.github/agents/tests-qa.md`
 
 ## Source Structure Overview (Evidence)
 - Public exports surface: `vgs-collect-react-native/src/index.tsx`

@@ -3,8 +3,10 @@ const { getDefaultConfig } = require('expo/metro-config');
 
 const config = getDefaultConfig(__dirname);
 
-// 1. Watch root folder
-config.watchFolders = [path.resolve(__dirname, '..')];
+// 1. Watch root folder in addition to Expo defaults
+config.watchFolders = Array.from(
+  new Set([...(config.watchFolders ?? []), path.resolve(__dirname, '..')])
+);
 
 // 2. Ensure symlinks are followed
 config.resolver.nodeModulesPaths = [
