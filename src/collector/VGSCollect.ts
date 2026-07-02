@@ -598,7 +598,11 @@ class VGSCollect {
 
     if (parsedUrl) {
       // Return a canonical URL so reserved chars are encoded, not stripped.
-      return parsedUrl.toString();
+      let canonical = parsedUrl.toString();
+      if (!resultUrl.endsWith('/') && canonical.endsWith('/')) {
+        canonical = canonical.slice(0, -1);
+      }
+      return canonical;
     } else {
       throw new VGSError(VGSErrorCode.InvalidConfigurationURL, 'Invalid URL', {
         URL: resultUrl,
