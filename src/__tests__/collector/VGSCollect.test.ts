@@ -149,6 +149,28 @@ describe('VGSCollect', () => {
       expect(url).toBe('https://example.com/another/path');
     });
 
+    it('should remove a trailing slash added by URL serialization', () => {
+      const collect = new VGSCollect(tenantId, environment);
+      const expectedUrl = `https://${tenantId}.${environment}.verygoodproxy.com/post`;
+      jest.spyOn(collect as any, 'parseURL').mockReturnValue({
+        toString: () => `${expectedUrl}/`,
+      });
+      const buildUrl = (collect as any).buildUrl.bind(collect);
+
+      expect(buildUrl(collect.BASE_VAULT_URL, '/post')).toBe(expectedUrl);
+    });
+
+    it('should preserve an explicitly provided trailing slash', () => {
+      const collect = new VGSCollect(tenantId, environment);
+      const expectedUrl = `https://${tenantId}.${environment}.verygoodproxy.com/post/`;
+      jest.spyOn(collect as any, 'parseURL').mockReturnValue({
+        toString: () => expectedUrl,
+      });
+      const buildUrl = (collect as any).buildUrl.bind(collect);
+
+      expect(buildUrl(collect.BASE_VAULT_URL, '/post/')).toBe(expectedUrl);
+    });
+
     it('should preserve query params and dots in path', () => {
       const collect = new VGSCollect(tenantId, environment);
       const buildUrl = (collect as any).buildUrl.bind(collect);
