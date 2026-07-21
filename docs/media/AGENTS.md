@@ -1,8 +1,22 @@
 # AGENTS.md
 
-**package version: 1.1.5**
+**Package Version: 1.1.6**
 
-Authoritative integration instructions for autonomous engineering agents implementing the `@vgs/collect-react-native` SDK. Follow these guidelines to ensure secure, correct, reproducible handling of sensitive data. Use ONLY documented public API exported from `src/index.tsx`:
+This guide is tailored for autonomous engineering agents integrating `@vgs/collect-react-native` into React Native applications. It focuses on deterministic, automatable steps: environment assessment, field setup, secure submission and tokenization flows, privacy compliance, testing, maintenance, and safe upgrade workflows.
+
+Documentation Source of Truth Across Versions
+- The canonical durable instruction source for this repository lives at `skills/vgs-collect-react-native-guide/references/AGENTS.md`.
+- Repository root `AGENTS.md` points to that canonical file so root-path workflows continue to work in a normal checkout.
+- The single public AI skill entrypoint lives at `skills/vgs-collect-react-native-guide/SKILL.md`. It routes task type and version selection, then defers package rules and invariants to this file.
+- The installed skill bundle must ship `skills/vgs-collect-react-native-guide/references/AGENTS.md` so standalone skill installs receive this policy file automatically.
+- For the public skill and public documentation workflows, the canonical repository for tags and versioned docs is `https://github.com/verygoodsecurity/vgs-collect-react-native`.
+- When the package version used by the target project can be determined, agents MUST prefer root `AGENTS.md` from the matching Git tag in the public `verygoodsecurity/vgs-collect-react-native` repository before giving version-sensitive guidance.
+- If an exact tag is unavailable, agents MUST use the nearest compatible tag and clearly disclose the mismatch before giving version-sensitive guidance.
+- Private forks or internal mirrors do not override the public repository as the source of truth for public skill guidance.
+- If the package is not installed or its version cannot be determined, agents SHOULD use the default-branch copy of this file and say that latest guidance is being used.
+- Release tags MUST be created only after `AGENTS.md`, `README.md`, and `skills/vgs-collect-react-native-guide/SKILL.md` match the shipped package behavior for that release.
+
+Authoritative integration instructions for autonomous engineering agents implementing the `@vgs/collect-react-native` package. Follow these guidelines to ensure secure, correct, reproducible handling of sensitive data. Use ONLY documented public API exported from `src/index.tsx`:
 
 Public Exports Surface
 - Classes / Objects: `VGSCollect`, `VGSCollectLogger`, `VGSTokenizationConfiguration`, `ExpDateSeparateSerializer`.
@@ -10,7 +24,7 @@ Public Exports Surface
 - Components: `VGSTextInput`, `VGSCardInput`, `VGSCVCInput`.
 - Types: `VGSTextInputState` plus validator rule classes implementing the `ValidationRule` interface (all available through the root package import).
 
-Never access un-exported internals or mutate private fields. Import ONLY from the package root entrypoint. Do not fork SDK logic.
+Never access un-exported internals or mutate private fields. Import ONLY from the package root entrypoint. Do not fork package logic.
 
 ---
 ## 1. Core Purpose & Mental Model
@@ -141,7 +155,7 @@ if (state.meta?.last4 && state.isValid) {
   VGSCollectLogger.getInstance().logInfo?.(`card last4=${state.meta.last4}`);
 }
 ```
-(Confirm available method names; avoid if not exported—prefer generic integration-level logging outside SDK.)
+(Confirm available method names; avoid if not exported—prefer generic integration-level logging outside the package.)
 
 ---
 ## 7. Security Rules For Agents
@@ -154,7 +168,7 @@ Mandatory Checks:
 
 Forbidden Actions:
 - Calling private methods (anything not exported).
-- Modifying SDK source as a means to change behavior.
+- Modifying package source as a means to change behavior.
 - Re-implementing tokenization or encryption.
 
 ---
@@ -284,7 +298,7 @@ await collector.submit('/post', 'POST', {}, { payment: { number: '{{ pan }}', cv
 ---
 ## 16. Final Rule
 If uncertain between two approaches, choose the one that:
-1. Requires fewer assumptions about internal SDK behavior.
+1. Requires fewer assumptions about internal package behavior.
 2. Never touches raw sensitive data post-submit.
 3. Avoids reimplementing validation already provided.
 4. Uses only documented exports.
