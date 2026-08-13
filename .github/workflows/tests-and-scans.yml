@@ -16,7 +16,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
       - name: Setup Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
           node-version: '24.x'
           cache: 'npm'
@@ -38,7 +38,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
       - name: Setup Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
           node-version: '24.x'
           cache: 'npm'
@@ -176,9 +176,20 @@ jobs:
           xcode-version: '26.2'
       - name: Install Maestro CLI
         run: |
-          curl -Ls "https://get.maestro.mobile.dev" | bash
-          echo "PATH=$HOME/.maestro/bin:$PATH" >> $GITHUB_ENV
-          echo "MAESTRO_DRIVER_STARTUP_TIMEOUT=180000" >> $GITHUB_ENV
+          set -euo pipefail
+          MAESTRO_ZIP="$RUNNER_TEMP/maestro.zip"
+          curl --fail --location --silent --show-error \
+            --output "$MAESTRO_ZIP" \
+            "https://github.com/mobile-dev-inc/Maestro/releases/download/cli-2.8.0/maestro.zip"
+          echo "b3e561161904fb391875ca5834d5b22cf0b01c052dd1b408ad83e30d8f8951b3  $MAESTRO_ZIP" \
+            | shasum -a 256 --check
+          MAESTRO_EXTRACT_DIR="$RUNNER_TEMP/maestro"
+          mkdir -p "$MAESTRO_EXTRACT_DIR"
+          unzip -q "$MAESTRO_ZIP" -d "$MAESTRO_EXTRACT_DIR"
+          mkdir -p "$HOME/.maestro"
+          cp -R "$MAESTRO_EXTRACT_DIR/maestro/." "$HOME/.maestro/"
+          echo "PATH=$HOME/.maestro/bin:$PATH" >> "$GITHUB_ENV"
+          echo "MAESTRO_DRIVER_STARTUP_TIMEOUT=180000" >> "$GITHUB_ENV"
       - name: Download Built iOS App Artifact
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:

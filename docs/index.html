@@ -1,8 +1,18 @@
-<!DOCTYPE html><html class="default" lang="en" data-base="./"><head><meta charset="utf-8"/><meta http-equiv="x-ua-compatible" content="IE=edge"/><title>@vgs/collect-react-native</title><meta name="description" content="Documentation for @vgs/collect-react-native"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="stylesheet" href="assets/style.css"/><link rel="stylesheet" href="assets/highlight.css"/><script defer src="assets/main.js"></script><script async src="assets/icons.js" id="tsd-icons-script"></script><script async src="assets/search.js" id="tsd-search-script"></script><script async src="assets/navigation.js" id="tsd-nav-script"></script></head><body><script>document.documentElement.dataset.theme = localStorage.getItem("tsd-theme") || "os";document.body.style.display="none";setTimeout(() => window.app?app.showPage():document.body.style.removeProperty("display"),500)</script><header class="tsd-page-toolbar"><div class="tsd-toolbar-contents container"><a href="index.html" class="title">@vgs/collect-react-native</a><div id="tsd-toolbar-links"></div><button id="tsd-search-trigger" class="tsd-widget" aria-label="Search"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><use href="assets/icons.svg#icon-search"></use></svg></button><dialog id="tsd-search" aria-label="Search"><input role="combobox" id="tsd-search-input" aria-controls="tsd-search-results" aria-autocomplete="list" aria-expanded="true" autocapitalize="off" autocomplete="off" placeholder="Search the docs" maxLength="100"/><ul role="listbox" id="tsd-search-results"></ul><div id="tsd-search-status" aria-live="polite" aria-atomic="true"><div>Preparing search index...</div></div></dialog><a href="#" class="tsd-widget menu" id="tsd-toolbar-menu-trigger" data-toggle="menu" aria-label="Menu"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><use href="assets/icons.svg#icon-menu"></use></svg></a></div></header><div class="container container-main"><div class="col-content"><div class="tsd-page-title"><h1>@vgs/collect-react-native</h1></div><div class="tsd-panel tsd-typography"><p align="center">
+<!DOCTYPE html><html class="default" lang="en" data-base="./"><head><meta charset="utf-8"/><meta http-equiv="x-ua-compatible" content="IE=edge"/><title>@vgs/collect-react-native</title><meta name="description" content="Documentation for @vgs/collect-react-native"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="stylesheet" href="assets/style.css"/><link rel="stylesheet" href="assets/highlight.css"/><script defer src="assets/main.js"></script><script async src="assets/icons.js" id="tsd-icons-script"></script><script async src="assets/search.js" id="tsd-search-script"></script><script async src="assets/navigation.js" id="tsd-nav-script"></script></head><body><script>document.documentElement.dataset.theme = localStorage.getItem("tsd-theme") || "os";document.body.style.display="none";setTimeout(() => window.app?app.showPage():document.body.style.removeProperty("display"),500)</script><header class="tsd-page-toolbar">
+<div class="tsd-toolbar-contents container"><a href="index.html" class="title">@vgs/collect-react-native</a>
+<div id="tsd-toolbar-links"></div><button id="tsd-search-trigger" class="tsd-widget" aria-label="Search"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><use href="assets/icons.svg#icon-search"></use></svg></button><dialog id="tsd-search" aria-label="Search"><input role="combobox" id="tsd-search-input" aria-controls="tsd-search-results" aria-autocomplete="list" aria-expanded="true" autocapitalize="off" autocomplete="off" placeholder="Search the docs" maxLength="100"/>
+<ul role="listbox" id="tsd-search-results"></ul>
+<div id="tsd-search-status" aria-live="polite" aria-atomic="true">
+<div>Preparing search index...</div></div></dialog><a href="#" class="tsd-widget menu" id="tsd-toolbar-menu-trigger" data-toggle="menu" aria-label="Menu"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><use href="assets/icons.svg#icon-menu"></use></svg></a></div></header>
+<div class="container container-main">
+<div class="col-content">
+<div class="tsd-page-title">
+<h1>@vgs/collect-react-native</h1></div>
+<div class="tsd-panel tsd-typography"><p align="center">
   <a href="https://www.verygoodsecurity.com/" rel="nofollow">
     <img src="https://avatars0.githubusercontent.com/u/17788525" width="128" alt="VGS Logo">
   </a>
-  <h3 align="center">VGS Collect React Native SDK</h3>
+  <h3 align="center">VGS Collect React Native Package</h3>
   <p align="center">
     Securely collect, tokenize, and manage sensitive data in your React Native applications with ease.
     <br />
@@ -12,7 +22,8 @@
     <a href="https://www.npmjs.com/package/@vgs/collect-react-native">NPM (@vgs/collect-react-native)</a>
   </p>
 </p>
-<h2 id="table-of-contents" class="tsd-anchor-link">Table of Contents<a href="#table-of-contents" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2><ul>
+<h2 id="table-of-contents" class="tsd-anchor-link">Table of Contents<a href="#table-of-contents" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<ul>
 <li><a href="#introduction">Introduction</a></li>
 <li><a href="#features">Features</a></li>
 <li><a href="#installation">Installation</a></li>
@@ -31,8 +42,10 @@
 <li><a href="#releases">Releases</a></li>
 <li><a href="#license">License</a></li>
 </ul>
-<h2 id="introduction" class="tsd-anchor-link">Introduction<a href="#introduction" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2><p>The <code>@vgs/collect-react-native</code> SDK by Very Good Security (VGS) enables you to securely collect and manage sensitive data such as credit card information and Social Security Numbers (SSNs) within your React Native applications. Leveraging VGS's data protection infrastructure ensures that sensitive information is handled securely, simplifying compliance and enhancing user trust.</p>
-<h2 id="features" class="tsd-anchor-link">Features<a href="#features" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2><ul>
+<h2 id="introduction" class="tsd-anchor-link">Introduction<a href="#introduction" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<p>The <code>@vgs/collect-react-native</code> package by Very Good Security (VGS) enables you to securely collect and manage sensitive data such as credit card information and Social Security Numbers (SSNs) within your React Native applications. Leveraging VGS's data protection infrastructure ensures that sensitive information is handled securely, simplifying compliance and enhancing user trust.</p>
+<h2 id="features" class="tsd-anchor-link">Features<a href="#features" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<ul>
 <li><strong>Secure Data Collection:</strong> Tokenize sensitive data before it reaches your servers.</li>
 <li><strong>Customizable Input Components:</strong> Pre-built components for various data types (e.g., Card Number, CVC, Expiration Date, Social Security Number).</li>
 <li><strong>Real-time Validation:</strong> Instant feedback on input validity to enhance user experience.</li>
@@ -40,14 +53,31 @@
 <li><strong>Easy Integration:</strong> Simple setup and integration with existing React Native projects.</li>
 <li><strong>Compliance Ready:</strong> Assists in achieving PCI DSS compliance by minimizing the handling of sensitive data.</li>
 </ul>
-<h2 id="installation" class="tsd-anchor-link">Installation<a href="#installation" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2><p>Install the <code>@vgs/collect-react-native</code> package using npm or yarn:</p>
+<h2 id="installation" class="tsd-anchor-link">Installation<a href="#installation" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<p>Install the <code>@vgs/collect-react-native</code> package using npm or yarn:</p>
 <pre><code class="bash"><span class="hl-0"># Using npm</span><br/><span class="hl-1">npm</span><span class="hl-2"> </span><span class="hl-3">install</span><span class="hl-2"> </span><span class="hl-3">@vgs/collect-react-native</span><br/><br/><span class="hl-0"># Using yarn</span><br/><span class="hl-1">yarn</span><span class="hl-2"> </span><span class="hl-3">add</span><span class="hl-2"> </span><span class="hl-3">@vgs/collect-react-native</span>
 </code><button type="button">Copy</button></pre>
 
 <p>Ensure you have React Native set up in your project. If not, follow the official React Native &quot;Getting Started&quot; guide.</p>
-<h2 id="ai-agent-integration" class="tsd-anchor-link">AI Agent Integration<a href="#ai-agent-integration" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2><p>Use <a href="media/AGENTS.md"><code>AGENTS.md</code></a> as the single authoritative context for autonomous coding agents integrating or maintaining this React Native SDK. It lists public APIs, security constraints, validation rules, upgrade &amp; testing expectations.</p>
+<h2 id="ai-agent-integration" class="tsd-anchor-link">AI Agent Integration<a href="#ai-agent-integration" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<p>This repository ships a public AI skill at <a href="media/SKILL.md"><code>skills/vgs-collect-react-native-guide/SKILL.md</code></a> for teams integrating <code>@vgs/collect-react-native</code> into an app.</p>
+<p>Recommended: install the skill with <code>skills.sh</code>. This is the easiest way to give a compatible AI agent the repository-specific guidance it needs for <code>@vgs/collect-react-native</code> integrations.</p>
+<p>The installed skill bundle includes <code>references/AGENTS.md</code>, and repository root <code>AGENTS.md</code> points to that same file, so a compatible skill-aware agent receives the durable integration policy automatically as part of the skill download without maintaining two copies.</p>
+<p>What the skill is useful for:</p>
+<ul>
+<li>choosing the correct VGS Collect flow for the request, such as proxy submission, Vault tokenization, alias creation, or card creation</li>
+<li>asking a clarifying question when a card-entry request is ambiguous and the flow is not specified</li>
+<li>steering non-card collection requests such as SSN or generic sensitive fields toward the correct field and tokenization APIs instead of card-specific ones</li>
+<li>keeping generated guidance aligned with the installed package version when that version can be detected</li>
+<li>following the integration rules in <a href="media/AGENTS.md"><code>AGENTS.md</code></a> for public APIs, validation, privacy, and testing expectations automatically</li>
+</ul>
+<p>Install the skill with <code>skills.sh</code>:</p>
+<pre><code class="bash"><span class="hl-1">npx</span><span class="hl-2"> </span><span class="hl-3">skills</span><span class="hl-2"> </span><span class="hl-3">add</span><span class="hl-2"> </span><span class="hl-3">https://github.com/verygoodsecurity/vgs-collect-react-native</span><span class="hl-2"> </span><span class="hl-4">--skill</span><span class="hl-2"> </span><span class="hl-3">vgs-collect-react-native-guide</span>
+</code><button type="button">Copy</button></pre>
+
+<p>If your AI tool does not support skills yet, you can still copy <a href="media/AGENTS.md"><code>AGENTS.md</code></a> into the agent context manually. That file is the authoritative integration guide for supported public APIs, security constraints, validation rules, migration expectations, and testing requirements.</p>
 <p>Minimal System Prompt Example:</p>
-<pre><code class="text">You are an autonomous engineering agent integrating the VGS Collect React Native SDK into an existing app.
+<pre><code class="text">You are an autonomous engineering agent integrating the VGS Collect React Native package into an existing app.
 Use the full contents of AGENTS.md as the authoritative policy.
 Constraints:
 - Only public exports from package root (no internal imports).
@@ -61,25 +91,16 @@ Goals:
 Return: Modified source files only. Do not commit secrets.
 </code><button type="button">Copy</button></pre>
 
-<p>Developer Prompt (Inline Example for a Single Task):</p>
-<pre><code class="text">Task: Add custom tokenization to include exp date split into month/year using ExpDateSeparateSerializer.
-Follow AGENTS.md sections on tokenization &amp; serializers.
-Do not alter existing public API; add tests asserting alias keys exp_month &amp; exp_year are returned.
-</code><button type="button">Copy</button></pre>
-
-<p>When updating prompts for agents:</p>
-<ul>
-<li>Always reference <code>AGENTS.md</code> explicitly (do not duplicate entire content inline).</li>
-<li>Keep constraints explicit (public API, no sensitive logs, validation required).</li>
-<li>Include concrete acceptance criteria (e.g., which tests must pass, which fields to add).</li>
-</ul>
-<h2 id="prerequisites" class="tsd-anchor-link">Prerequisites<a href="#prerequisites" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2><p>You should have your organization registered at the <a href="https://dashboard.verygoodsecurity.com/dashboard/" target="_blank">VGS Dashboard</a>. A Sandbox vault is
+<h2 id="prerequisites" class="tsd-anchor-link">Prerequisites<a href="#prerequisites" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<p>You should have your organization registered at the <a href="https://dashboard.verygoodsecurity.com/dashboard/" target="_blank">VGS Dashboard</a>. A Sandbox vault is
 pre-created for you. Use the Dashboard to configure routes and begin collecting data. If you don’t have an organization yet, see the Quick Integration guides. Use your <code>&lt;vaultId&gt;</code> to start collecting data.</p>
-<h2 id="example-app" class="tsd-anchor-link">Example app<a href="#example-app" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2><p>You can check our example application <a href="media/App.tsx">here</a>. To run the example application, follow these steps:</p>
-<pre><code class="bash"><span class="hl-0"># 1. Download SDK repository</span><br/><span class="hl-0"># 2. In root folder run:</span><br/><span class="hl-1">npm</span><span class="hl-2"> </span><span class="hl-3">install</span><br/><span class="hl-0"># 3. Navigate to example folder</span><br/><span class="hl-1">cd</span><span class="hl-2"> </span><span class="hl-3">example</span><br/><span class="hl-0"># 4. Build example app for iOS or Android</span><br/><span class="hl-1">npm</span><span class="hl-2"> </span><span class="hl-3">run</span><span class="hl-2"> </span><span class="hl-3">ios</span><br/><span class="hl-0"># 5. Later you can start expo server(optional)</span><br/><span class="hl-1">npx</span><span class="hl-2"> </span><span class="hl-3">expo</span><span class="hl-2"> </span><span class="hl-3">start</span><span class="hl-2"> </span><span class="hl-4">--clear</span>
+<h2 id="example-app" class="tsd-anchor-link">Example app<a href="#example-app" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<p>You can check our example application <a href="media/App.tsx">here</a>. To run the example application, follow these steps:</p>
+<pre><code class="bash"><span class="hl-0"># 1. Download package repository</span><br/><span class="hl-0"># 2. In root folder run:</span><br/><span class="hl-1">npm</span><span class="hl-2"> </span><span class="hl-3">install</span><br/><span class="hl-0"># 3. Navigate to example folder</span><br/><span class="hl-1">cd</span><span class="hl-2"> </span><span class="hl-3">example</span><br/><span class="hl-0"># 4. Build example app for iOS or Android</span><br/><span class="hl-1">npm</span><span class="hl-2"> </span><span class="hl-3">run</span><span class="hl-2"> </span><span class="hl-3">ios</span><br/><span class="hl-0"># 5. Later you can start expo server(optional)</span><br/><span class="hl-1">npx</span><span class="hl-2"> </span><span class="hl-3">expo</span><span class="hl-2"> </span><span class="hl-3">start</span><span class="hl-2"> </span><span class="hl-4">--clear</span>
 </code><button type="button">Copy</button></pre>
 
-<h2 id="quick-start" class="tsd-anchor-link">Quick Start<a href="#quick-start" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2><p>Import the SDK Components:</p>
+<h2 id="quick-start" class="tsd-anchor-link">Quick Start<a href="#quick-start" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<p>Import the package components:</p>
 <pre><code class="javascript"><span class="hl-5">import</span><span class="hl-2"> { </span><span class="hl-6">VGSCollect</span><span class="hl-2">, </span><span class="hl-6">VGSTextInput</span><span class="hl-2"> } </span><span class="hl-5">from</span><span class="hl-2"> </span><span class="hl-3">&#39;@vgs/collect-react-native&#39;</span><span class="hl-2">;</span>
 </code><button type="button">Copy</button></pre>
 
@@ -96,7 +117,8 @@ pre-created for you. Use the Dashboard to configure routes and begin collecting 
 </code><button type="button">Copy</button></pre>
 
 <p><strong>NOTE</strong>: Each input must set a <code>fieldName</code> that exactly matches the field key configured in your Vault Route settings. This identifier is required for redact/reveal operations on inbound/outbound routes.</p>
-<h2 id="ui-inputs" class="tsd-anchor-link">UI Inputs<a href="#ui-inputs" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2><p>The SDK provides pre-built UI input components for securely collecting sensitive data. The following input components are available:</p>
+<h2 id="ui-inputs" class="tsd-anchor-link">UI Inputs<a href="#ui-inputs" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<p>The package provides pre-built UI input components for securely collecting sensitive data. The following input components are available:</p>
 <ul>
 <li><strong><code>VGSTextInput</code>:</strong> A versatile, customizable input component.
 <ul>
@@ -144,7 +166,8 @@ pre-created for you. Use the Dashboard to configure routes and begin collecting 
 </ul>
 </li>
 </ul>
-<h2 id="masking-inputs" class="tsd-anchor-link">Masking Inputs<a href="#masking-inputs" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2><p>VGS Input components allow you to apply a mask to the input field using the mask prop. This prop accepts a string pattern that defines how the input should be formatted. It uses placeholder characters to define the allowed characters in each position of the mask. The following placeholders are supported:</p>
+<h2 id="masking-inputs" class="tsd-anchor-link">Masking Inputs<a href="#masking-inputs" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<p>VGS Input components allow you to apply a mask to the input field using the mask prop. This prop accepts a string pattern that defines how the input should be formatted. It uses placeholder characters to define the allowed characters in each position of the mask. The following placeholders are supported:</p>
 <ul>
 <li><code>#</code>: Any digit (0-9)</li>
 <li><code>@</code>: Any letter (a-zA-Z)</li>
@@ -156,7 +179,8 @@ pre-created for you. Use the Dashboard to configure routes and begin collecting 
 <pre><code class="javascript"><span class="hl-8">&lt;</span><span class="hl-9">VGSTextInput</span><br/><span class="hl-2">  </span><span class="hl-0">//... other props</span><br/><span class="hl-2">  </span><span class="hl-10">mask</span><span class="hl-2">=</span><span class="hl-3">&quot;#### #### #### ####&quot;</span><span class="hl-2"> </span><span class="hl-0">// Example mask for a credit card number</span><br/><span class="hl-8">/&gt;</span>
 </code><button type="button">Copy</button></pre>
 
-<h2 id="custom-validation" class="tsd-anchor-link">Custom Validation<a href="#custom-validation" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2><p>VGS Input components allow you to re-define default or add custom validation rules to ensure that the input data meets certain criteria. You can use the validationRules prop to pass an array of ValidationRule objects.</p>
+<h2 id="custom-validation" class="tsd-anchor-link">Custom Validation<a href="#custom-validation" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<p>VGS Input components allow you to re-define default or add custom validation rules to ensure that the input data meets certain criteria. You can use the validationRules prop to pass an array of ValidationRule objects.</p>
 <p>Here's a list of the available validation rules:</p>
 <ul>
 <li><code>NotEmptyRule</code>: Checks if the input is not empty.</li>
@@ -171,15 +195,45 @@ pre-created for you. Use the Dashboard to configure routes and begin collecting 
 <pre><code class="javascript"><span class="hl-5">import</span><span class="hl-2"> { </span><span class="hl-6">NotEmptyRule</span><span class="hl-2">, </span><span class="hl-6">LengthRule</span><span class="hl-2">, </span><span class="hl-6">PatternRule</span><span class="hl-2"> } </span><span class="hl-5">from</span><span class="hl-2"> </span><span class="hl-3">&#39;@vgs/collect-react-native&#39;</span><span class="hl-2">;</span><br/><br/><span class="hl-8">&lt;</span><span class="hl-9">VGSTextInput</span><br/><span class="hl-2">  </span><span class="hl-0">//... other props</span><br/><span class="hl-2">  </span><span class="hl-10">validationRules</span><span class="hl-2">=</span><span class="hl-4">{</span><span class="hl-11">[</span><br/><span class="hl-11">    </span><span class="hl-4">new</span><span class="hl-11"> </span><span class="hl-1">NotEmptyRule</span><span class="hl-11">(</span><span class="hl-3">&#39;This field is required&#39;</span><span class="hl-11">),</span><br/><span class="hl-11">    </span><span class="hl-4">new</span><span class="hl-11"> </span><span class="hl-1">LengthRule</span><span class="hl-11">(</span><span class="hl-12">5</span><span class="hl-11">, </span><span class="hl-12">10</span><span class="hl-11">, </span><span class="hl-3">&#39;Length must be between 5 and 10 characters&#39;</span><span class="hl-11">),</span><br/><span class="hl-11">    </span><span class="hl-4">new</span><span class="hl-11"> </span><span class="hl-1">PatternRule</span><span class="hl-11">(</span><span class="hl-3">&#39;/^[a-zA-Z]+$/&#39;</span><span class="hl-11">, </span><span class="hl-3">&#39;Only letters are allowed&#39;</span><span class="hl-11">),</span><br/><span class="hl-11">  ]</span><span class="hl-4">}</span><br/><span class="hl-8">/&gt;</span>
 </code><button type="button">Copy</button></pre>
 
-<h2 id="ios-privacy-manifest" class="tsd-anchor-link">iOS Privacy Manifest<a href="#ios-privacy-manifest" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2><p>The SDK <strong>does not directly package or embed</strong> the Privacy Manifest file into your iOS project. Instead, manually copy and update the privacy information from the VGS <a href="https://github.com/verygoodsecurity/vgs-collect-react-native/blob/main/PrivacyInfo.xcprivacy">Privacy Manifest file</a>. Follow the instructions in our <a href="https://www.verygoodsecurity.com/docs/vgs-collect/rn-sdk/privacy-details">documentation</a>.</p>
-<h3 id="privacy" class="tsd-anchor-link">Privacy<a href="#privacy" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3><p>The SDK tracks a few key metrics about feature usage to guide improvements. No personal or raw sensitive data is tracked.</p>
+<h2 id="ios-privacy-manifest" class="tsd-anchor-link">iOS Privacy Manifest<a href="#ios-privacy-manifest" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<p>The package <strong>does not directly embed</strong> the Privacy Manifest file into your iOS project. Instead, manually copy and update the privacy information from the VGS <a href="https://github.com/verygoodsecurity/vgs-collect-react-native/blob/main/PrivacyInfo.xcprivacy">Privacy Manifest file</a>. Follow the instructions in our <a href="https://docs.verygoodsecurity.com/vault/developer-tools/vgs-collect/react-native-sdk">documentation</a>.</p>
+<h3 id="privacy" class="tsd-anchor-link">Privacy<a href="#privacy" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<p>The package tracks a few key metrics about feature usage to guide improvements. No personal or raw sensitive data is tracked.</p>
 <p>You can opt-out of metrics collection via <code>VGSAnalyticsClient</code>:</p>
 <pre><code><span class="hl-6">VGSAnalyticsClient</span><span class="hl-2">.</span><span class="hl-1">getInstance</span><span class="hl-2">().</span><span class="hl-6">shouldCollectAnalytics</span><span class="hl-2"> = </span><span class="hl-4">false</span>
 </code><button>Copy</button></pre>
 
-<h3 id="documentation" class="tsd-anchor-link">Documentation<a href="#documentation" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3><ul>
-<li>SDK Documentation: <a href="https://www.verygoodsecurity.com/docs/vgs-collect/rn-sdk">https://www.verygoodsecurity.com/docs/vgs-collect/rn-sdk</a></li>
+<h3 id="documentation" class="tsd-anchor-link">Documentation<a href="#documentation" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul>
+<li>Package Documentation: <a href="https://docs.verygoodsecurity.com/vault/developer-tools/vgs-collect/react-native-sdk">https://docs.verygoodsecurity.com/vault/developer-tools/vgs-collect/react-native-sdk</a></li>
 </ul>
-<h3 id="releases" class="tsd-anchor-link">Releases<a href="#releases" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3><p>To follow <code>@vgs/collect-react-native</code> updates and changes, check the <a href="https://github.com/verygoodsecurity/vgs-collect-react-native/releases">releases page</a>.</p>
-<h2 id="license" class="tsd-anchor-link">License<a href="#license" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2><p>The VGS Collect React Native SDK is released under the MIT license. See <a href="https://github.com/verygoodsecurity/vgs-collect-react-native/blob/main/LICENSE">LICENSE</a> for details.</p>
-</div></div><div class="col-sidebar"><div class="page-menu"><div class="tsd-navigation settings"><details class="tsd-accordion"><summary class="tsd-accordion-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="assets/icons.svg#icon-chevronDown"></use></svg><h3>Settings</h3></summary><div class="tsd-accordion-details"><div class="tsd-filter-visibility"><span class="settings-label">Member Visibility</span><ul id="tsd-filter-options"><li class="tsd-filter-item"><label class="tsd-filter-input"><input type="checkbox" id="tsd-filter-protected" name="protected"/><svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect class="tsd-checkbox-background" width="30" height="30" x="1" y="1" rx="6" fill="none"></rect><path class="tsd-checkbox-checkmark" d="M8.35422 16.8214L13.2143 21.75L24.6458 10.25" stroke="none" stroke-width="3.5" stroke-linejoin="round" fill="none"></path></svg><span>Protected</span></label></li><li class="tsd-filter-item"><label class="tsd-filter-input"><input type="checkbox" id="tsd-filter-inherited" name="inherited" checked/><svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect class="tsd-checkbox-background" width="30" height="30" x="1" y="1" rx="6" fill="none"></rect><path class="tsd-checkbox-checkmark" d="M8.35422 16.8214L13.2143 21.75L24.6458 10.25" stroke="none" stroke-width="3.5" stroke-linejoin="round" fill="none"></path></svg><span>Inherited</span></label></li><li class="tsd-filter-item"><label class="tsd-filter-input"><input type="checkbox" id="tsd-filter-external" name="external"/><svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect class="tsd-checkbox-background" width="30" height="30" x="1" y="1" rx="6" fill="none"></rect><path class="tsd-checkbox-checkmark" d="M8.35422 16.8214L13.2143 21.75L24.6458 10.25" stroke="none" stroke-width="3.5" stroke-linejoin="round" fill="none"></path></svg><span>External</span></label></li></ul></div><div class="tsd-theme-toggle"><label class="settings-label" for="tsd-theme">Theme</label><select id="tsd-theme"><option value="os">OS</option><option value="light">Light</option><option value="dark">Dark</option></select></div></div></details></div><details open class="tsd-accordion tsd-page-navigation"><summary class="tsd-accordion-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="assets/icons.svg#icon-chevronDown"></use></svg><h3>On This Page</h3></summary><div class="tsd-accordion-details"><a href="#table-of-contents"><span>Table of <wbr/>Contents</span></a><a href="#introduction"><span>Introduction</span></a><a href="#features"><span>Features</span></a><a href="#installation"><span>Installation</span></a><a href="#ai-agent-integration"><span>AI <wbr/>Agent <wbr/>Integration</span></a><a href="#prerequisites"><span>Prerequisites</span></a><a href="#example-app"><span>Example app</span></a><a href="#quick-start"><span>Quick <wbr/>Start</span></a><a href="#ui-inputs"><span>UI <wbr/>Inputs</span></a><a href="#masking-inputs"><span>Masking <wbr/>Inputs</span></a><a href="#custom-validation"><span>Custom <wbr/>Validation</span></a><a href="#ios-privacy-manifest"><span>i<wbr/>OS <wbr/>Privacy <wbr/>Manifest</span></a><ul><li><a href="#privacy"><span>Privacy</span></a></li><li><a href="#documentation"><span>Documentation</span></a></li><li><a href="#releases"><span>Releases</span></a></li></ul><a href="#license"><span>License</span></a></div></details></div><div class="site-menu"><nav class="tsd-navigation"><a href="modules.html">@vgs/collect-react-native</a><ul class="tsd-small-nested-navigation" id="tsd-nav-container"><li>Loading...</li></ul></nav></div></div></div><footer><p class="tsd-generator">Generated using <a href="https://typedoc.org/" target="_blank">TypeDoc</a></p></footer><div class="overlay"></div></body></html>
+<h3 id="releases" class="tsd-anchor-link">Releases<a href="#releases" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<p>To follow <code>@vgs/collect-react-native</code> updates and changes, check the <a href="https://github.com/verygoodsecurity/vgs-collect-react-native/releases">releases page</a>.</p>
+<h2 id="license" class="tsd-anchor-link">License<a href="#license" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<p>The VGS Collect React Native package is released under the MIT license. See <a href="https://github.com/verygoodsecurity/vgs-collect-react-native/blob/main/LICENSE">LICENSE</a> for details.</p>
+</div></div>
+<div class="col-sidebar">
+<div class="page-menu">
+<div class="tsd-navigation settings">
+<details class="tsd-accordion"><summary class="tsd-accordion-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="assets/icons.svg#icon-chevronDown"></use></svg>
+<h3>Settings</h3></summary>
+<div class="tsd-accordion-details">
+<div class="tsd-filter-visibility"><span class="settings-label">Member Visibility</span>
+<ul id="tsd-filter-options">
+<li class="tsd-filter-item"><label class="tsd-filter-input"><input type="checkbox" id="tsd-filter-protected" name="protected"/><svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect class="tsd-checkbox-background" width="30" height="30" x="1" y="1" rx="6" fill="none"></rect><path class="tsd-checkbox-checkmark" d="M8.35422 16.8214L13.2143 21.75L24.6458 10.25" stroke="none" stroke-width="3.5" stroke-linejoin="round" fill="none"></path></svg><span>Protected</span></label></li>
+<li class="tsd-filter-item"><label class="tsd-filter-input"><input type="checkbox" id="tsd-filter-inherited" name="inherited" checked/><svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect class="tsd-checkbox-background" width="30" height="30" x="1" y="1" rx="6" fill="none"></rect><path class="tsd-checkbox-checkmark" d="M8.35422 16.8214L13.2143 21.75L24.6458 10.25" stroke="none" stroke-width="3.5" stroke-linejoin="round" fill="none"></path></svg><span>Inherited</span></label></li>
+<li class="tsd-filter-item"><label class="tsd-filter-input"><input type="checkbox" id="tsd-filter-external" name="external"/><svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect class="tsd-checkbox-background" width="30" height="30" x="1" y="1" rx="6" fill="none"></rect><path class="tsd-checkbox-checkmark" d="M8.35422 16.8214L13.2143 21.75L24.6458 10.25" stroke="none" stroke-width="3.5" stroke-linejoin="round" fill="none"></path></svg><span>External</span></label></li></ul></div>
+<div class="tsd-theme-toggle"><label class="settings-label" for="tsd-theme">Theme</label><select id="tsd-theme"><option value="os">OS</option><option value="light">Light</option><option value="dark">Dark</option></select></div></div></details></div>
+<details open class="tsd-accordion tsd-page-navigation"><summary class="tsd-accordion-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="assets/icons.svg#icon-chevronDown"></use></svg>
+<h3>On This Page</h3></summary>
+<div class="tsd-accordion-details"><a href="#table-of-contents"><span>Table of <wbr/>Contents</span></a><a href="#introduction"><span>Introduction</span></a><a href="#features"><span>Features</span></a><a href="#installation"><span>Installation</span></a><a href="#ai-agent-integration"><span>AI <wbr/>Agent <wbr/>Integration</span></a><a href="#prerequisites"><span>Prerequisites</span></a><a href="#example-app"><span>Example app</span></a><a href="#quick-start"><span>Quick <wbr/>Start</span></a><a href="#ui-inputs"><span>UI <wbr/>Inputs</span></a><a href="#masking-inputs"><span>Masking <wbr/>Inputs</span></a><a href="#custom-validation"><span>Custom <wbr/>Validation</span></a><a href="#ios-privacy-manifest"><span>i<wbr/>OS <wbr/>Privacy <wbr/>Manifest</span></a>
+<ul>
+<li><a href="#privacy"><span>Privacy</span></a></li>
+<li><a href="#documentation"><span>Documentation</span></a></li>
+<li><a href="#releases"><span>Releases</span></a></li></ul><a href="#license"><span>License</span></a></div></details></div>
+<div class="site-menu">
+<nav class="tsd-navigation"><a href="modules.html">@vgs/collect-react-native</a>
+<ul class="tsd-small-nested-navigation" id="tsd-nav-container">
+<li>Loading...</li></ul></nav></div></div></div><footer>
+<p class="tsd-generator">Generated using <a href="https://typedoc.org/" target="_blank">TypeDoc</a></p></footer>
+<div class="overlay"></div></body></html>

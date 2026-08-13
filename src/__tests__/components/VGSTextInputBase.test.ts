@@ -1,4 +1,9 @@
-import { resolveEffectiveMaxLength } from '../../components/VGSTextInputBase';
+import {
+  resolveEffectiveMaxLength,
+  shouldUpdateCardMask,
+} from '../../components/VGSTextInputBase';
+import { maskInput } from '../../utils/masker/Masker';
+import { PaymentCardBrandsManager } from '../../utils/paymentCards/PaymentCardBrandsManager';
 
 describe('resolveEffectiveMaxLength', () => {
   it('returns provided maxLength when mask is not set', () => {
@@ -15,5 +20,19 @@ describe('resolveEffectiveMaxLength', () => {
 
   it('keeps smaller maxLength when it is below mask length', () => {
     expect(resolveEffectiveMaxLength(4, '#### ####')).toBe(4);
+  });
+});
+
+describe('shouldUpdateCardMask', () => {
+  it('updates the mask when a brand is detected on the first interaction', () => {
+    const cardNumber = '378282246310005';
+    const amex = PaymentCardBrandsManager.getInstance().detectBrand(cardNumber);
+
+    expect(shouldUpdateCardMask(amex?.name, undefined)).toBe(true);
+    expect(maskInput(cardNumber, amex?.mask ?? '')).toBe('3782 822463 10005');
+  });
+
+  it('does not update the mask when the detected brand has not changed', () => {
+    expect(shouldUpdateCardMask('amex', 'amex')).toBe(false);
   });
 });

@@ -173,6 +173,16 @@ export const resolveEffectiveMaxLength = (
 };
 
 /**
+ * Determines whether a detected card brand requires the input mask to change.
+ * An undefined current brand represents the field's initial interaction.
+ */
+export const shouldUpdateCardMask = (
+  detectedBrandName?: string,
+  currentBrandName?: string
+): boolean =>
+  Boolean(detectedBrandName && detectedBrandName !== currentBrandName);
+
+/**
  * Secure text input for collecting sensitive data with VGS.
  *
  * Behavior:
@@ -354,13 +364,11 @@ export const VGSTextInputBase = forwardRef<VGSTextInputRef, VGSTextInputProps>((
       const manager = PaymentCardBrandsManager.getInstance();
       const detectedBrand = manager.detectBrand(cleaned);
       const brandName = detectedBrand ? detectedBrand.name : 'Unknown';
+      const currentBrandName =
+        'cardBrand' in state ? state.cardBrand : undefined;
 
       // Only update if brand changed
-      if (
-        detectedBrand &&
-        'cardBrand' in state &&
-        brandName !== state.cardBrand
-      ) {
+      if (detectedBrand && shouldUpdateCardMask(brandName, currentBrandName)) {
         // Update the 'cvc' fields via VGSCollect
         collector.updateCvcFieldForBrand(brandName);
         // Apply the new mask
