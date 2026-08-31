@@ -63,7 +63,7 @@ export const inputTypeDefaults: Record<
     keyboardType: 'numeric',
     validationRules: [
       new PatternRule('\\d*$', 'INVALID_CVC'),
-      new LengthRule(3, 3, 'INVALID_CVC_LEHGTH'),
+      new LengthRule(3, 3, 'INVALID_CVC_LENGTH'),
     ],
   },
 

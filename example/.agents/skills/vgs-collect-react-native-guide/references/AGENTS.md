@@ -22,7 +22,7 @@ Public Exports Surface
 - Classes / Objects: `VGSCollect`, `VGSCollectLogger`, `VGSTokenizationConfiguration`, `ExpDateSeparateSerializer`.
 - Validators & Errors: imported via root barrel (e.g. `import { NotEmptyRule, VGSError, VGSErrorCode } from '@vgs/collect-react-native';`). Do NOT import using relative subpaths like `@vgs/collect-react-native/utils/validators` or `./utils/validators` – these are not published subpath exports.
 - Components: `VGSTextInput`, `VGSCardInput`, `VGSCVCInput`.
-- Types: `VGSTextInputState` plus validator rule classes implementing the `ValidationRule` interface (all available through the root package import).
+- Types: `VGSCollectSessionOptions`, `VGSTextInputState`, `VGSCardAttributes`, `VGSAuthHandler`, `VGSCardAttributesWillBeginCallback`, `VGSCardAttributesSuccessCallback`, `VGSCardAttributesLookupResponse`, `VGSCardAttributesLookupResponseCallback`, `VGSCardAttributesErrorCallback` plus validator rule classes implementing the `ValidationRule` interface (all available through the root package import).
 
 Never access un-exported internals or mutate private fields. Import ONLY from the package root entrypoint. Do not fork package logic.
 
@@ -37,11 +37,11 @@ Sensitive data flow:
 4. Call `collector.submit()` or `collector.tokenize()` / `collector.createAliases()` / `collector.createCard()` after validation; handle response tokens/aliases only.
 
 Success Criteria For Any Agent Task
-1. No logs of raw PAN, CVC, SSN, expiration values (only non-sensitive metadata e.g. last4 or brand if provided by state). 
-2. All fields validated (no submission if `VGSErrorCode.InputDataIsNotValid` would be thrown). 
-3. Aliases/tokens surfaced to app layer only after successful submit/tokenize; raw inputs never persisted. 
-4. Field names align with Vault Routes. 
-5. No hardcoded secrets (vaultId, routeId, access token supplied via app config). 
+1. No logs of raw PAN, CVC, SSN, expiration values (only non-sensitive metadata e.g. last4 or brand if provided by state).
+2. All fields validated (no submission if `VGSErrorCode.InputDataIsNotValid` would be thrown).
+3. Aliases/tokens surfaced to app layer only after successful submit/tokenize; raw inputs never persisted.
+4. Field names align with Vault Routes.
+5. No hardcoded secrets (vaultId, routeId, access token supplied via app config).
 6. Public API only; no monkey-patching or reflection.
 
 ---
@@ -76,7 +76,7 @@ Components:
 Supported `type` values (string): `text`, `card`, `cardHolderName`, `expDate`, `cvc`, `ssn`. Each supplies default mask + validators:
 - `card`: Mask like `#### #### #### ####` (brand adaptive). Includes payment card rule (length, brand, Luhn).
 - `cvc`: Numeric pattern + length rule (3/4 digits). Updated automatically with brand (agent should not re-implement logic).
-- `expDate`: Pattern `##/##` (MM/YY) or override `##/####` for long year; includes expiration validation (not past, month 01–12).
+- `expDate`: Pattern `##/##` (MM/YY) or override `##/####` for long year in Vault submission flows; CMP create/update accepts MM/YY only. Includes expiration validation (not past, month 01–12).
 - `cardHolderName`: Typically pattern for letters/spaces; may override with custom rules.
 - `ssn`: Mask `###-##-####` pattern; treat as sensitive for logging even if not flagged internally.
 - `text`: No defaults; supply custom rules if needed.
@@ -110,8 +110,16 @@ Methods on `VGSCollect`:
 - `submit(path?: string, method?: string, extraData?: Record<string,any>, customRequestStructure?: Record<string,any>)`: Validates fields, constructs URL, merges extraData. Returns `{status, response}` where `response` is the Fetch Response object. Parse JSON cautiously (may be empty on some error codes).
 - `tokenize()`: Tokenizes fields configured with `tokenizationConfig`; returns `{ status, data }` where `data` is alias mapping.
 - `createAliases()`: Similar to `tokenize()` but uses newer Vault API version (`v2`). Keep alias ordering assumptions intact—never reorder collected data.
-- `createCard(token: string, extraData?: Record<string,string>)`: Requires JWT Access token; validates fields then posts to Card Management API, returns `{status, response}`.
+- `createCard(extraData?: Record<string,any>)`: Uses `authHandler` to fetch a JWT and posts canonical CMP attributes. Required collected keys are `pan`, `exp_month`, and `exp_year`; expiration is MM/YY and is sent as numeric month and two-digit year. SDK caches auth-handler tokens and refreshes once on 401/403.
+- `updateCard(cardId, extraData?)`: Updates populated CVC and/or MM/YY expiration. CMP accepts only `cvc`, `exp_month`, and `exp_year`; at least one must be present.
+- `updateCardWithToken(cardId, token, extraData?)`: Explicit-token update variant with no caching or automatic refresh.
 - `isFieldValueEqual(fieldName: string, value: string)`: Internal helper used by `MatchFieldRule` for secure cross-field comparison (no direct need to call in typical integrations).
+
+CMP field contract:
+- Create requires `pan`, `exp_month`, and `exp_year`; optional attributes are `cvc`, `cardholder`, `token_type`, and `wallet_type`.
+- Update accepts only `cvc`, `exp_month`, and `exp_year`.
+- User-defined card metadata belongs in `data.meta`, not in update attributes.
+- Canonical CMP field names are independent of configurable Vault Route field names. Prefer the compound convenience inputs, which supply the canonical defaults.
 
 Tokenization Field Setup:
 Use `tokenizationConfig` prop inside component (if exposed) or future adapter logic: object implementing `{ storage, format }`. For expiration date with `ExpDateSeparateSerializer` you receive `exp_month` and `exp_year` pieces; mapping preserved automatically.
@@ -163,7 +171,7 @@ Mandatory Checks:
 - Never persist raw field values in Redux, AsyncStorage, files, or analytics.
 - No console.log of user-entered sensitive data. Run regex scan before commit: pattern for 13–19 consecutive digits; reject if found unredacted.
 - Vault / route IDs configurable via environment (e.g. `.env` or build-time constants) not hardcoded production values.
-- JWT tokens passed only at call site of `createCard`; never store globally.
+- JWT tokens managed via `authHandler` callback; SDK caches and refreshes automatically. Never store tokens globally in app code.
 - Always handle thrown `VGSError` and branch on `error.code`.
 
 Forbidden Actions:
@@ -206,9 +214,16 @@ Custom Expiration Serializer:
 
 Card Management (create card):
 ```tsx
-await collector.createCard(accessToken, { data: { meta: { source: 'mobile' }}});
+collector.setAuthHandler(async () => {
+  const response = await fetch('https://yourapi.com/auth/token');
+  const { token } = await response.json();
+  return token;
+});
+await collector.createCard({ token_type: 'pan' });
 ```
-Validate `accessToken` non-empty before call; handle thrown `VGSErrorCode.IvalidAccessToken`.
+SDK automatically manages token lifecycle: caches on first use, refreshes on 401/403 responses.
+
+Replacing the auth handler prevents any token returned later by the previous handler from entering the shared cache. Create and update retries refresh only authorization and reuse the original validated request payload; they do not read secure field values again.
 
 Custom Structure Wrapping:
 Use `customRequestStructure` placeholders to embed sensitive data inside nested JSON while keeping collection deterministic.
@@ -217,9 +232,12 @@ Use `customRequestStructure` placeholders to embed sensitive data inside nested 
 ## 10. Error Codes (Selected)
 From exported errors: handle at least:
 - `InvalidVaultConfiguration`: Vault/route/cname config bad.
+- `InvalidFormConfiguration`: Invalid form parameter passed to `VGSCollect.session()`.
+- `SessionInitializationFailed`: Session init failed due to network/config load errors.
 - `InputDataIsNotValid`: One or more fields invalid (inspect `details`).
 - `InvalidConfigurationURL`: Built URL fails validation.
-- `IvalidAccessToken`: (typo in code, treat as access token invalid) for `createCard`.
+- `AuthHandlerNotSet`: `authHandler` missing when required (e.g., `createCard`, card attributes lookup).
+- `IvalidAccessToken`: (typo in code, treat as access token invalid) for empty, prefix-only (for example, `Bearer `), or invalid JWTs.
 Map each to user-friendly message; never expose internal details or raw data.
 
 ---
@@ -235,22 +253,121 @@ Minimum agent-maintained tests (Jest / React Native Testing Library):
 1. Card number valid vs invalid triggers error on `submit` (simulate invalid value, expect thrown `VGSError`).
 2. Expiration date past month returns validation error.
 3. Tokenization returns alias map for configured field. Mock `fetch` to supply tokenization response.
-4. `createCard` with empty token throws `VGSError`.
+4. `createCard` without `authHandler` throws `VGSError`.
 5. Custom request structure replaces placeholders correctly.
 
-Ensure tests never log full PAN (`4111111111111111` acceptable for test but not printed). 
+Ensure tests never log full PAN (`4111111111111111` acceptable for test but not printed).
 
 ---
 ## 13. Security & Privacy Checklist (Pre-Merge)
 [ ] No `console.log` with raw sensitive values.
 [ ] All submit flows catch `VGSError` and branch by `code`.
 [ ] Field names match Vault Routes.
-[ ] Access tokens passed only to `createCard` on demand.
+[ ] JWT tokens managed via `authHandler`; SDK handles caching and refresh.
 [ ] No private API usage (imports only from package root exports).
 [ ] Tests cover validation failure & success paths.
 
 ---
-## 14. Glossary
+## 14. Card Attributes Lookup
+The SDK supports automatic card attributes lookup at 11 digits when configured via `VGSCollect.session()` or manually enabled.
+
+**Configuration:**
+```tsx
+// Via session (automatically applies includedCardAttributes from form config)
+const collector = await VGSCollect.session('checkout-form', vaultId, 'sandbox');
+
+// Or manually configure
+const collector = new VGSCollect(vaultId, 'sandbox');
+collector.setIncludedCardAttributes(['card_type', 'issuer', 'bin']);
+```
+
+**Auth Handler (Required for Lookup):**
+Provide a Promise-based handler returning JWT token:
+```tsx
+collector.setAuthHandler(async () => {
+  // Fetch JWT from your backend
+  const response = await fetch('https://yourapi.com/auth/token');
+  const { token } = await response.json();
+  return token;
+});
+```
+
+**Lifecycle Callbacks:**
+```tsx
+// Optional: Notified before lookup request starts
+collector.setWillBeginCardAttributesLookup(() => {
+  console.log('Starting card attributes lookup...');
+});
+
+// Handle successful lookup
+collector.setDidRetrieveCardAttributes((attributes: VGSCardAttributes) => {
+  console.log('Card attributes:', attributes);
+  // The complete parsed backend response is preserved without unwrapping.
+  // For a wrapped response, read fields from attributes.data.
+});
+
+// Handle lookup errors
+collector.setDidFailToRetrieveCardAttributes((error: Error) => {
+  console.error('Lookup failed:', error);
+  // Handle auth failures, network errors, etc.
+});
+
+// Receive status, parsed data, and the native Fetch response for every result.
+collector.setCardAttributesLookupResponse((lookupResponse) => {
+  if (lookupResponse.type === 'success') {
+    const attributes: VGSCardAttributes = lookupResponse.data;
+    console.log('Lookup status:', lookupResponse.status, attributes);
+  }
+});
+```
+
+**Behavior:**
+- Lookup triggers automatically when the user types 11 digits in the first registered `VGSCardInput` field. Use one card field per collector for lookup flows.
+- Prevents duplicate requests for same BIN (first 11 digits).
+- Results delivered only if user hasn't changed the first 11 digits.
+- The success callback receives the complete parsed backend response object. The SDK does not unwrap `data` or reshape backend-defined nested attributes.
+- If user deletes below 11 digits, state resets and next 11-digit entry triggers new lookup.
+- Response keys and nesting are backend-defined; integrations must not assume a flattened schema.
+
+**Security:**
+- JWT token requested on-demand via `authHandler` when lookup needed.
+- If `authHandler` not set, lookup fails with `VGSErrorCode.AuthHandlerNotSet`.
+- Empty token triggers `VGSErrorCode.IvalidAccessToken`.
+- Never log JWT tokens or raw card numbers.
+
+**Example Integration:**
+```tsx
+import { VGSCollect, VGSCardInput, type VGSCardAttributes } from '@vgs/collect-react-native';
+
+const [cardAttributes, setCardAttributes] = useState<VGSCardAttributes | null>(null);
+
+const lookupData =
+  cardAttributes?.data &&
+  typeof cardAttributes.data === 'object' &&
+  !Array.isArray(cardAttributes.data)
+    ? (cardAttributes.data as VGSCardAttributes)
+    : cardAttributes;
+
+const collector = new VGSCollect(vaultId, 'sandbox');
+collector.setIncludedCardAttributes(['card_type', 'issuer']);
+collector.setAuthHandler(async () => {
+  const token = await fetchJWTFromBackend();
+  return token;
+});
+collector.setDidRetrieveCardAttributes(setCardAttributes);
+
+return (
+  <View>
+    <VGSCardInput collector={collector} fieldName="pan" />
+    {typeof lookupData?.issuing_organization === 'string' && (
+      <Text>Bank: {lookupData.issuing_organization}</Text>
+    )}
+  </View>
+);
+```
+
+---
+## 15. Glossary
 - Vault ID: Unique tenant ID for secure proxying.
 - Route ID: Optional path segment enabling route-specific host mapping.
 - CNAME: Custom hostname pointing to VGS infrastructure.
@@ -258,9 +375,10 @@ Ensure tests never log full PAN (`4111111111111111` acceptable for test but not 
 - Alias / Token: Non-sensitive substitution returned by VGS tokenization.
 - Serializer: Splits a composite field into multiple keys for submission/tokenization.
 - Validation Rule: Object evaluating input returning error strings.
+- Card Attributes: Metadata about a card (BIN, brand, type, issuer, country) retrieved via lookup service.
 
 ---
-## 15. Quick Reference Snippets
+## 16. Quick Reference Snippets
 Initialize Collector:
 ```tsx
 const collector = new VGSCollect(process.env.VGS_VAULT_ID!, 'sandbox');
@@ -288,7 +406,11 @@ const { status, data } = await collector.tokenize();
 ```
 Create Card:
 ```tsx
-await collector.createCard(jwtAccessToken);
+collector.setAuthHandler(async () => {
+  const token = await fetchJWTFromBackend();
+  return token;
+});
+await collector.createCard();
 ```
 Custom Structure:
 ```tsx
@@ -296,7 +418,7 @@ await collector.submit('/post', 'POST', {}, { payment: { number: '{{ pan }}', cv
 ```
 
 ---
-## 16. Final Rule
+## 17. Final Rule
 If uncertain between two approaches, choose the one that:
 1. Requires fewer assumptions about internal package behavior.
 2. Never touches raw sensitive data post-submit.

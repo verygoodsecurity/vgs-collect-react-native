@@ -15,8 +15,18 @@ export enum VGSErrorCode {
   // *** Other errors ***
   // When token is null or empty.
   IvalidAccessToken = 1300,
+  // When authHandler is not set but required.
+  AuthHandlerNotSet = 1301,
+  // When the response object is not an HTTP response where required.
+  UnexpectedResponseType = 1400,
+  // When the response body format is empty or malformed.
+  UnexpectedResponseDataFormat = 1401,
+  // When form parameter is invalid.
+  InvalidFormConfiguration = 1460,
   // When VGS config URL is not valid.
   InvalidVaultConfiguration = 1470,
   // When VGS config URL is not valid.
   InvalidConfigurationURL = 1480,
+  // When session initialization fails due to configuration load error.
+  SessionInitializationFailed = 1490,
 }

@@ -182,6 +182,16 @@ export const shouldUpdateCardMask = (
 ): boolean =>
   Boolean(detectedBrandName && detectedBrandName !== currentBrandName);
 
+export const notifyCardInputAfterTextSync = (
+  textRef: { current: string },
+  maskedInput: string,
+  rawInput: string,
+  notifyCallback?: (rawInput: string) => void
+) => {
+  textRef.current = maskedInput;
+  notifyCallback?.(rawInput);
+};
+
 /**
  * Secure text input for collecting sensitive data with VGS.
  *
@@ -247,6 +257,7 @@ export const VGSTextInputBase = forwardRef<VGSTextInputRef, VGSTextInputProps>((
   const effectiveMaxLength = resolveEffectiveMaxLength(maxLength, currentMask);
 
   const textRef = React.useRef<string>(text);
+  const cardInputNotifyCallback = React.useRef<((rawInput: string) => void) | undefined>(undefined);
 
   useEffect(() => {
     textRef.current = text;
@@ -283,7 +294,7 @@ export const VGSTextInputBase = forwardRef<VGSTextInputRef, VGSTextInputProps>((
   };
 
   useEffect(() => {
-    collector.registerField(
+    const notifyCallback = collector.registerField(
       fieldName,
       () => {
         const submitValue = getUnmaskedValue(
@@ -312,10 +323,16 @@ export const VGSTextInputBase = forwardRef<VGSTextInputRef, VGSTextInputProps>((
       tokenizationConfig,
       type,
       validationRules,
-      handleFieldConfigUpdate
+      handleFieldConfigUpdate,
+      () => unmaskInput(textRef.current, currentMask ?? '')
     );
+    
+    // Store callback for card input notification
+    cardInputNotifyCallback.current = notifyCallback;
+    
     return () => {
       collector.unregisterField(fieldName);
+      cardInputNotifyCallback.current = undefined;
     };
   }, [collector, fieldName, currentMask, divider, type, validationRules]);
 
@@ -383,6 +400,13 @@ export const VGSTextInputBase = forwardRef<VGSTextInputRef, VGSTextInputProps>((
         cardBin: isValid ? manager.getBin(cleaned, brandName) : undefined,
         last4: isValid && cleaned.length >= 12 ? cleaned.slice(-4) : undefined,
       };
+
+      notifyCardInputAfterTextSync(
+        textRef,
+        maskedInput,
+        cleaned,
+        cardInputNotifyCallback.current
+      );
     } else if (type === 'ssn') {
       // Example: store last 4 for SSN
       const cleaned = rawInput.replace(/\D/g, '');
@@ -392,6 +416,7 @@ export const VGSTextInputBase = forwardRef<VGSTextInputRef, VGSTextInputProps>((
       };
     }
     // Update our text display
+    textRef.current = maskedInput;
     setText(maskedInput);
     setState(newState);
     onStateChange?.(newState);

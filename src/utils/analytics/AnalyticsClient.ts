@@ -1,14 +1,16 @@
 import { Platform } from 'react-native';
 import type FormAnalyticsDetails from './FormAnalyticsDetails';
 import { generateUUID } from '../Utils';
-const VGSCOLLECT_SDK_VERSION = '1.1.6';
+export const VGSCOLLECT_SDK_VERSION = '1.1.7';
 
 export enum AnalyticsEventType {
   FieldInit = 'Init',
+  CollectInit = 'CollectInit',
   HostnameValidation = 'HostnameValidation',
   BeforeSubmit = 'BeforeSubmit',
   Submit = 'Submit',
   Scan = 'Scan',
+  CardLookup = 'CardLookup',
 }
 
 export enum AnalyticEventStatus {
@@ -25,6 +27,31 @@ export enum AnalyticEventStatus {
  */
 class VGSAnalyticsClient {
   private static instance: VGSAnalyticsClient;
+  private static readonly REDACTED_VALUE = '[REDACTED]';
+  private static readonly SAFE_CONTENT_VALUES = new Set([
+    'textField',
+    'custom_data',
+  ]);
+  private static readonly SENSITIVE_KEY_NAMES = new Set([
+    'authorization',
+    'authtoken',
+    'accesstoken',
+    'body',
+    'cardnumber',
+    'content',
+    'contents',
+    'cvc',
+    'cvv',
+    'file',
+    'filecontents',
+    'jwt',
+    'number',
+    'pan',
+    'payload',
+    'ssn',
+    'token',
+    'value',
+  ]);
   public shouldCollectAnalytics: boolean = true;
 
   private vgsCollectSessionId: string;
@@ -99,7 +126,7 @@ class VGSAnalyticsClient {
     status: AnalyticEventStatus = AnalyticEventStatus.Success,
     extraData: { [key: string]: any } = {}
   ): void {
-    const data = {
+    const data = this.sanitizePayload({
       ...extraData,
       type: type.toString(), // Store enum value as string
       status: status.toString(), // Store enum value as string
@@ -108,7 +135,7 @@ class VGSAnalyticsClient {
       source: 'rnSDK',
       localTimestamp: Date.now(),
       vgsCollectSessionId: this.vgsCollectSessionId,
-    };
+    });
     this.sendAnalyticsRequest(data);
   }
 
@@ -140,6 +167,72 @@ class VGSAnalyticsClient {
   private encodeData(data: { [key: string]: any }): string {
     const jsonData = JSON.stringify(data);
     return btoa(jsonData); // Base64 encoding
+  }
+
+  private sanitizePayload(data: { [key: string]: any }): {
+    [key: string]: any;
+  } {
+    return this.sanitizeValue(data) as { [key: string]: any };
+  }
+
+  private sanitizeValue(value: unknown, key?: string): unknown {
+    if (key && this.isSafeAnalyticsContent(key, value)) {
+      return [...value];
+    }
+
+    if (key && this.isSensitiveKey(key)) {
+      return VGSAnalyticsClient.REDACTED_VALUE;
+    }
+
+    if (typeof value === 'string') {
+      return this.sanitizeString(value);
+    }
+
+    if (Array.isArray(value)) {
+      return value.map((item) => this.sanitizeValue(item));
+    }
+
+    if (value && typeof value === 'object') {
+      return Object.entries(value as Record<string, unknown>).reduce<
+        Record<string, unknown>
+      >((accumulator, [entryKey, entryValue]) => {
+        accumulator[entryKey] = this.sanitizeValue(entryValue, entryKey);
+        return accumulator;
+      }, {});
+    }
+
+    return value;
+  }
+
+  private isSafeAnalyticsContent(
+    key: string,
+    value: unknown
+  ): value is string[] {
+    const normalizedKey = key.replace(/[^a-z0-9]/gi, '').toLowerCase();
+    return (
+      normalizedKey === 'content' &&
+      Array.isArray(value) &&
+      value.every(
+        (item) =>
+          typeof item === 'string' &&
+          VGSAnalyticsClient.SAFE_CONTENT_VALUES.has(item)
+      )
+    );
+  }
+
+  private isSensitiveKey(key: string): boolean {
+    const normalizedKey = key.replace(/[^a-z0-9]/gi, '').toLowerCase();
+    return VGSAnalyticsClient.SENSITIVE_KEY_NAMES.has(normalizedKey);
+  }
+
+  private sanitizeString(value: string): string {
+    return value
+      .replace(/\bBearer\s+[A-Za-z0-9\-._~+/=]+\b/gi, 'Bearer [REDACTED]')
+      .replace(
+        /\b[A-Za-z0-9_-]{8,}\.[A-Za-z0-9._-]{8,}\.[A-Za-z0-9._-]{8,}\b/g,
+        VGSAnalyticsClient.REDACTED_VALUE
+      )
+      .replace(/\b\d{13,19}\b/g, VGSAnalyticsClient.REDACTED_VALUE);
   }
 }
 

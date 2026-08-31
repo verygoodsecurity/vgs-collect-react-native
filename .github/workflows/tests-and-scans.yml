@@ -6,6 +6,7 @@ on:
   push:
     branches:
       - 'main'
+      - 'canary'
     tags:
       - 'v*'
 jobs:
@@ -27,6 +28,10 @@ jobs:
  
   resolve_ios_build_meta:
     name: Build iOS App + Resolve Metadata
+    if: >-
+      (github.event_name == 'push' &&
+        (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/canary')) ||
+      (github.event_name == 'pull_request' && github.base_ref == 'main')
     runs-on: macos-15
     outputs:
       build_name: ${{ steps.meta.outputs.build_name }}
@@ -159,6 +164,10 @@ jobs:
 
   e2e_tests:
     name: E2E Tests (iOS + Maestro) • ${{ needs.resolve_ios_build_meta.outputs.build_name }}
+    if: >-
+      (github.event_name == 'push' &&
+        (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/canary')) ||
+      (github.event_name == 'pull_request' && github.base_ref == 'main')
     runs-on: macos-15
     needs: [test, resolve_ios_build_meta]
     env:

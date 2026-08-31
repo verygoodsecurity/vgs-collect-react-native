@@ -9,6 +9,7 @@ import { generateUUID } from '../Utils';
 class FormAnalyticsDetails {
   /** Form ID to correlate fields to a single collector instance. */
   readonly formId: string;
+  readonly sessionFormId?: string;
   readonly tnt: string;
   readonly env: string;
 
@@ -18,10 +19,25 @@ class FormAnalyticsDetails {
    * @param tenantId - Vault tenant identifier.
    * @param environment - Environment label (`sandbox`, `live`, `live-<region>`).
    */
-  constructor(tenantId: string, environment: string) {
-    this.formId = generateUUID();
+  constructor(
+    tenantId: string,
+    environment: string,
+    options?: {
+      formId?: string;
+      sessionFormId?: string;
+    }
+  ) {
+    this.formId = options?.formId ?? generateUUID();
+    this.sessionFormId = options?.sessionFormId;
     this.tnt = tenantId;
     this.env = environment;
+  }
+
+  withSessionFormId(sessionFormId: string): FormAnalyticsDetails {
+    return new FormAnalyticsDetails(this.tnt, this.env, {
+      formId: this.formId,
+      sessionFormId,
+    });
   }
 }
 export default FormAnalyticsDetails;
