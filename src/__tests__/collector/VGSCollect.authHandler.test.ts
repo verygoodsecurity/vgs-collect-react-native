@@ -722,6 +722,37 @@ describe('VGSCollect - Auth Handler & JWT Token Management', () => {
       expect((collector as any).cachedJwtToken).toBeUndefined();
     });
 
+    it('should preserve a metadata-only legacy data envelope', async () => {
+      const collector = new VGSCollect(tenantId, environment);
+      (collector as any).validateFields = jest.fn();
+      (collector as any).collectFieldData = jest
+        .fn()
+        .mockResolvedValue(validCreateCardFields);
+      const mockSubmit = jest.fn().mockResolvedValue({
+        status: 201,
+        response: { ok: true },
+      });
+      (collector as any).submitDataToServer = mockSubmit;
+
+      await collector.createCard('legacy-token', {
+        data: { meta: { source: 'mobile' } },
+      });
+
+      const requestBody = mockSubmit.mock.calls[0][2];
+      expect(requestBody.data.attributes).toEqual({
+        pan: '4111111111111111',
+        exp_month: 4,
+        exp_year: 28,
+      });
+      expect(requestBody.data.attributes).not.toHaveProperty('data');
+      expect(requestBody.data.meta).toEqual({
+        source: 'mobile',
+        _source: 'vgs-collect',
+        _medium: platformSdkIdentifier,
+        _version: '1.2.0',
+      });
+    });
+
     it('should accept token directly as parameter', async () => {
       const collector = new VGSCollect(tenantId, environment);
 

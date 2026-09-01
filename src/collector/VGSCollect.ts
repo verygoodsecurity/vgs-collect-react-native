@@ -996,7 +996,9 @@ class VGSCollect {
       wrappedData && this.isRecord(wrappedData.attributes)
         ? wrappedData.attributes
         : null;
-    const attributeExtraData = wrappedAttributes ?? extraData;
+    const attributeExtraData = wrappedData
+      ? (wrappedAttributes ?? {})
+      : extraData;
     const sdkPayload = {
       data: {
         attributes: this.buildCreateCardAttributes(
@@ -1008,9 +1010,7 @@ class VGSCollect {
       },
     };
 
-    return wrappedAttributes
-      ? this.deepMerge(extraData, sdkPayload)
-      : sdkPayload;
+    return wrappedData ? this.deepMerge(extraData, sdkPayload) : sdkPayload;
   }
 
   /**
