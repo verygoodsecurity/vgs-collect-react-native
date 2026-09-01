@@ -107,9 +107,9 @@ A task may have a secondary mode, but the primary mode controls planning and out
 ## Output contract
 
 Begin every response by stating which version the guidance is based on, using one of:
-- `Using bundled @vgs/collect-react-native 1.1.7 guidance.`
-- `Detected @vgs/collect-react-native 1.1.7 from package.json; it matches the bundled guidance.`
-- `Detected @vgs/collect-react-native 1.2.0, but this skill bundles 1.1.7 guidance and may be outdated. Run npx skills check, then npx skills update.`
-- `Could not determine the installed @vgs/collect-react-native version; using the bundled 1.1.7 snapshot without claiming it is latest.`
+- `Using bundled @vgs/collect-react-native 1.2.0 guidance.`
+- `Detected @vgs/collect-react-native 1.2.0 from package.json; it matches the bundled guidance.`
+- `Detected @vgs/collect-react-native <resolved-version>, but this skill bundles 1.2.0 guidance and may be outdated. Run npx skills check, then npx skills update.`
+- `Could not determine the installed @vgs/collect-react-native version; using the bundled 1.2.0 snapshot without claiming it is latest.`
 
 Then proceed within the bundled snapshot and version-freshness rules above.

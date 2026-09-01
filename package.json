@@ -1,6 +1,6 @@
 {
   "name": "@vgs/collect-react-native",
-  "version": "1.1.7",
+  "version": "1.2.0",
   "description": "VGS Collect React Native SDK",
   "source": "./src/index.tsx",
   "main": "./lib/commonjs/index.js",

@@ -1,7 +1,7 @@
 import { Platform } from 'react-native';
 import type FormAnalyticsDetails from './FormAnalyticsDetails';
 import { generateUUID } from '../Utils';
-export const VGSCOLLECT_SDK_VERSION = '1.1.7';
+export const VGSCOLLECT_SDK_VERSION = '1.2.0';
 
 export enum AnalyticsEventType {
   FieldInit = 'Init',

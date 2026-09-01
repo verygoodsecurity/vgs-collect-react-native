@@ -277,7 +277,7 @@ describe('VGSCollect', () => {
         expect.objectContaining({
           _source: 'vgs-collect',
           _medium: platformSdkIdentifier,
-          _version: '1.1.7',
+          _version: '1.2.0',
         })
       );
       expect(meta).not.toHaveProperty('_formId');
@@ -308,7 +308,7 @@ describe('VGSCollect', () => {
           _source: 'vgs-collect',
           _medium: platformSdkIdentifier,
           _formId: 'checkout-form',
-          _version: '1.1.7',
+          _version: '1.2.0',
         })
       );
 

@@ -514,7 +514,7 @@ describe('VGSCollect - Auth Handler & JWT Token Management', () => {
             caller: 'preserved',
             _source: 'vgs-collect',
             _medium: platformSdkIdentifier,
-            _version: '1.1.7',
+            _version: '1.2.0',
           },
         },
       });
@@ -554,7 +554,7 @@ describe('VGSCollect - Auth Handler & JWT Token Management', () => {
           meta: expect.objectContaining({
             _source: 'vgs-collect',
             _medium: platformSdkIdentifier,
-            _version: '1.1.7',
+            _version: '1.2.0',
           }),
         },
       });
