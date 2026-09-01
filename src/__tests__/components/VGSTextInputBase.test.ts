@@ -1,4 +1,5 @@
 import {
+  notifyCardInputAfterTextSync,
   resolveEffectiveMaxLength,
   shouldUpdateCardMask,
 } from '../../components/VGSTextInputBase';
@@ -34,5 +35,23 @@ describe('shouldUpdateCardMask', () => {
 
   it('does not update the mask when the detected brand has not changed', () => {
     expect(shouldUpdateCardMask('amex', 'amex')).toBe(false);
+  });
+});
+
+describe('notifyCardInputAfterTextSync', () => {
+  it('updates the raw-value source before starting card lookup', () => {
+    const textRef = { current: '4111 1111 11' };
+    const notify = jest.fn(() => {
+      expect(textRef.current).toBe('4111 1111 111');
+    });
+
+    notifyCardInputAfterTextSync(
+      textRef,
+      '4111 1111 111',
+      '41111111111',
+      notify
+    );
+
+    expect(notify).toHaveBeenCalledWith('41111111111');
   });
 });

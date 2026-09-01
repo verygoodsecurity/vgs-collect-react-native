@@ -5,12 +5,22 @@ import { ValidationRule } from '../utils/validators/Validator';
 import { PaymentCardBrandsManager } from '../utils/paymentCards/PaymentCardBrandsManager';
 import type { VGSTokenizationConfiguration } from '../utils/tokenization/TokenizationConfiguration';
 import { VGSError, VGSErrorCode } from '../utils/errors';
+import type {
+  VGSCardAttributes,
+  VGSAuthHandler,
+  VGSCardAttributesWillBeginCallback,
+  VGSCardAttributesSuccessCallback,
+  VGSCardAttributesLookupResponse,
+  VGSCardAttributesLookupResponseCallback,
+  VGSCardAttributesErrorCallback,
+} from '../types/CardAttributesTypes';
 import VGCollectLogger, {
   VGSLogLevel,
   VGSLogSeverity,
 } from '../utils/logger/VGSCollectLogger';
 import VGSAnalyticsClient, {
   AnalyticEventStatus,
+  VGSCOLLECT_SDK_VERSION,
 } from '../utils/analytics/AnalyticsClient';
 import { AnalyticsEventType } from '../utils/analytics/AnalyticsClient';
 import FormAnalyticsDetails from '../utils/analytics/FormAnalyticsDetails';
@@ -36,12 +46,85 @@ interface TokenizationFieldMapping {
 interface FieldConfig {
   getSubmitValue: () => string | Record<string, string>;
   getValidationErrors: () => string[];
+  getRawValue?: () => string;
   mask?: string;
   validationRules?: ValidationRule[];
   type?: string;
   tokenizationConfig?: VGSTokenizationConfiguration;
   updateCallback?: FieldUpdateCallback;
 }
+
+interface RequestLogOverrides {
+  headers?: Record<string, any>;
+  payload?: Record<string, any>;
+}
+
+interface CmpRequestSnapshot {
+  payload?: Record<string, any>;
+}
+
+interface SessionConfigurationPayload {
+  form_name?: string;
+  version?: string;
+  config?: {
+    cardAttributes?: {
+      enable?: boolean;
+      parameters?: string[];
+    };
+  };
+}
+
+export interface VGSCollectSessionOptions {
+  /** Inline form configuration used when the remote configuration cannot be loaded. */
+  configuration?: SessionConfigurationPayload['config'];
+  /** Receives remote session configuration errors without preventing collector creation. */
+  onError?: (error: unknown) => void;
+}
+
+interface SessionConfigurationLoadTelemetry {
+  configFile: string;
+  configFileStatusCode?: number;
+  configFileLatency: number;
+}
+
+interface SessionConfigurationLoadResult extends SessionConfigurationLoadTelemetry {
+  payload: SessionConfigurationPayload;
+}
+
+interface SessionConfigurationLegacyLoadResult {
+  payload: SessionConfigurationPayload;
+  statusCode: number;
+  latency: number;
+}
+
+type SessionConfigurationLike =
+  | SessionConfigurationPayload
+  | SessionConfigurationLoadResult
+  | SessionConfigurationLegacyLoadResult;
+
+type CmpOperation = 'cardCreate' | 'cardUpdate';
+
+const CMP_REQUIRED_FIELDS_KEY = 'VGSSDKErrorInputDataRequired';
+const CMP_INVALID_FIELDS_KEY = 'VGSSDKErrorInputDataRequiredValid';
+const CMP_CREATE_REQUIRED_FIELDS = ['pan', 'exp_month', 'exp_year'] as const;
+const CMP_UPDATE_ALLOWED_FIELDS = new Set(['cvc', 'exp_month', 'exp_year']);
+
+const isResponseLike = (
+  value: unknown
+): value is {
+  ok: boolean;
+  status: number;
+  json?: () => Promise<unknown>;
+  text?: () => Promise<string>;
+  clone?: () => any;
+} => {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as { ok?: unknown }).ok === 'boolean' &&
+    typeof (value as { status?: unknown }).status === 'number'
+  );
+};
 /**
  * VGSCollect
  *
@@ -54,6 +137,14 @@ interface FieldConfig {
  * - CNAME: optional custom hostname validation gated before any submission.
  */
 class VGSCollect {
+  private static readonly CARD_ATTRIBUTES_LOOKUP_SANDBOX_URL =
+    'https://card-enrichment-api.sandbox.verygoodvault.com/cardattributes/enriched';
+  private static readonly CARD_ATTRIBUTES_LOOKUP_PRODUCTION_URL =
+    'https://card-enrichment-api.live.verygoodvault.com/cardattributes/enriched';
+  private static cardAttributesLookupEndpointOverride:
+    'sandbox' | 'production' | undefined;
+  private static suppressCreateInitAnalytics = false;
+
   private tenantId: string;
   private environment: string;
   private routeId?: string;
@@ -65,6 +156,19 @@ class VGSCollect {
   private logger: VGCollectLogger = VGCollectLogger.getInstance();
   private analyticsClient = VGSAnalyticsClient.getInstance();
   private formAnalyticsDetails: FormAnalyticsDetails;
+  private includedCardAttributes: string[] = [];
+
+  // Card Attributes Lookup state
+  private authHandler?: VGSAuthHandler;
+  private authHandlerGeneration = 0;
+  private willBeginCardAttributesLookup?: VGSCardAttributesWillBeginCallback;
+  private didRetrieveCardAttributes?: VGSCardAttributesSuccessCallback;
+  private cardAttributesLookupResponse?: VGSCardAttributesLookupResponseCallback;
+  private didFailToRetrieveCardAttributes?: VGSCardAttributesErrorCallback;
+  private requestedDigits11?: string;
+  private inFlightDigits11?: string;
+  private lookupStartedAt: Record<string, number> = {};
+  private cachedJwtToken?: string;
 
   /**
    * Creates a new collector bound to a Vault.
@@ -74,12 +178,121 @@ class VGSCollect {
    * @throws {VGSError} When configuration is invalid (tenant or environment).
    */
   public constructor(id: string, environment: string = 'sandbox') {
-    this.validateConfig(id, environment);
+    VGSCollect.validateConfig(id, environment);
     this.tenantId = id;
     this.environment = environment.toLowerCase();
     this.formAnalyticsDetails = new FormAnalyticsDetails(id, environment);
+
+    if (!VGSCollect.suppressCreateInitAnalytics) {
+      this.analyticsClient.trackFormEvent(
+        this.formAnalyticsDetails,
+        AnalyticsEventType.CollectInit,
+        AnalyticEventStatus.Success,
+        { formType: 'create' }
+      );
+    }
   }
-   
+
+  /**
+   * Overrides the card attributes lookup endpoint selection.
+   * When unset, the endpoint follows the collector environment.
+   *
+   * @param endpoint - Optional endpoint target for controlled environments such as tests.
+   */
+  public static setCardAttributesLookupEndpoint(
+    endpoint?: 'sandbox' | 'production'
+  ) {
+    VGSCollect.cardAttributesLookupEndpointOverride = endpoint;
+  }
+
+  /**
+   * Creates a new collector instance with form configuration.
+   *
+   * @param form - Form identifier (e.g., `checkout-form`).
+   * @param vaultId - Vault ID (e.g., `tnt12345`).
+   * @param environment - Deployment environment: `sandbox`, `live`, or `live-<region>`.
+   * @param options - Optional inline fallback configuration and remote-load error callback.
+   * @returns Promise resolving to configured VGSCollect instance.
+   * @throws {VGSError} When form, vaultId, or environment is invalid.
+   */
+  public static async session(
+    form: string | null | undefined,
+    vaultId: string,
+    environment: string = 'sandbox',
+    options: VGSCollectSessionOptions = {}
+  ): Promise<VGSCollect> {
+    VGSCollect.validateConfig(vaultId, environment);
+    const collector = VGSCollect.createCollectorWithoutInitAnalytics(
+      vaultId,
+      environment
+    );
+    const normalizedForm =
+      typeof form === 'string' ? VGSCollect.normalizeSessionForm(form) : form;
+
+    if (normalizedForm === null || normalizedForm === undefined) {
+      collector.analyticsClient.trackFormEvent(
+        collector.formAnalyticsDetails,
+        AnalyticsEventType.CollectInit,
+        AnalyticEventStatus.Success,
+        VGSCollect.buildSessionAnalyticsExtraData()
+      );
+      return collector;
+    }
+
+    VGSCollect.validateForm(normalizedForm);
+    collector.formAnalyticsDetails =
+      collector.formAnalyticsDetails.withSessionFormId(normalizedForm);
+
+    try {
+      const loadedConfig = await VGSCollect.loadConfiguration(
+        normalizedForm,
+        vaultId
+      );
+      const config = VGSCollect.normalizeSessionConfigurationResult(
+        normalizedForm,
+        loadedConfig
+      );
+
+      collector.setIncludedCardAttributes(
+        VGSCollect.resolveIncludedCardAttributes(config.payload.config)
+      );
+
+      collector.analyticsClient.trackFormEvent(
+        collector.formAnalyticsDetails,
+        AnalyticsEventType.CollectInit,
+        AnalyticEventStatus.Success,
+        VGSCollect.buildSessionAnalyticsExtraData({
+          configFile: config.configFile,
+          statusCode: config.configFileStatusCode,
+          latency: config.configFileLatency,
+        })
+      );
+
+      return collector;
+    } catch (error) {
+      const telemetry = VGSCollect.getSessionTelemetryFromError(error);
+      collector.setIncludedCardAttributes(
+        VGSCollect.resolveIncludedCardAttributes(options.configuration)
+      );
+      options.onError?.(error);
+      collector.analyticsClient.trackFormEvent(
+        collector.formAnalyticsDetails,
+        AnalyticsEventType.CollectInit,
+        AnalyticEventStatus.Success,
+        VGSCollect.buildSessionAnalyticsExtraData(
+          telemetry
+            ? {
+                configFile: telemetry.configFile,
+                statusCode: telemetry.configFileStatusCode,
+                latency: telemetry.configFileLatency,
+              }
+            : undefined
+        )
+      );
+      return collector;
+    }
+  }
+
   /**
    * Sets the Vault Route ID to shape the base hostname.
    * Host becomes `<tenantId>-<routeId>.<environment>.verygoodproxy.com`.
@@ -121,7 +334,7 @@ class VGSCollect {
       APIHostnameValidator.validateCustomHostname(cname, this.tenantId)
         .then((isValid) => {
           this.isCnameValidating = false;
-          this.cname = isValid ? normalizedCname ?? undefined : undefined;
+          this.cname = isValid ? (normalizedCname ?? undefined) : undefined;
           this.analyticsClient.trackFormEvent(
             this.formAnalyticsDetails,
             AnalyticsEventType.HostnameValidation,
@@ -145,6 +358,75 @@ class VGSCollect {
 
     await this.cnameValidationPromise;
   }
+
+  /**
+   * Sets the auth handler used by authenticated CMP operations and card lookup.
+   * Replacing the handler clears any JWT cached from the previous handler and
+   * prevents pending requests from that handler from repopulating the cache.
+   *
+   * @param handler - Async function returning a valid JWT token string.
+   */
+  public setAuthHandler(handler: VGSAuthHandler) {
+    if (this.authHandler !== handler) {
+      this.cachedJwtToken = undefined;
+    }
+    this.authHandler = handler;
+    this.authHandlerGeneration += 1;
+  }
+
+  /**
+   * Sets callback invoked before starting a card attributes lookup request.
+   *
+   * @param callback - Function called when lookup begins.
+   */
+  public setWillBeginCardAttributesLookup(
+    callback: VGSCardAttributesWillBeginCallback
+  ) {
+    this.willBeginCardAttributesLookup = callback;
+  }
+
+  /**
+   * Sets callback invoked when card attributes lookup succeeds.
+   *
+   * @param callback - Function receiving card attributes data.
+   */
+  public setDidRetrieveCardAttributes(
+    callback: VGSCardAttributesSuccessCallback
+  ) {
+    this.didRetrieveCardAttributes = callback;
+  }
+
+  /**
+   * Sets callback invoked when card attributes lookup completes with raw response details.
+   *
+   * @param callback - Function receiving success or failure response metadata.
+   */
+  public setCardAttributesLookupResponse(
+    callback: VGSCardAttributesLookupResponseCallback
+  ) {
+    this.cardAttributesLookupResponse = callback;
+  }
+
+  /**
+   * Sets callback invoked when card attributes lookup fails.
+   *
+   * @param callback - Function receiving error details.
+   */
+  public setDidFailToRetrieveCardAttributes(
+    callback: VGSCardAttributesErrorCallback
+  ) {
+    this.didFailToRetrieveCardAttributes = callback;
+  }
+
+  /**
+   * Sets included card attributes to fetch during lookup.
+   *
+   * @param attributes - Array of card attribute names (e.g., ['card_type', 'issuer']).
+   */
+  public setIncludedCardAttributes(attributes: string[]) {
+    this.includedCardAttributes = attributes;
+  }
+
   /**
    * Registers a field with the collector.
    * Typically invoked by SDK input components on mount.
@@ -156,6 +438,7 @@ class VGSCollect {
    * @param type - Field type string (e.g., `card`, `cvc`, `expDate`).
    * @param validationRules - Optional override rules; if provided, defaults are replaced.
    * @param updateCallback - Optional notifier invoked when mask/rules change (e.g., brand updates).
+   * @returns For card-type fields, returns a callback to notify of input changes; otherwise undefined.
    */
   registerField(
     fieldName: string,
@@ -164,11 +447,13 @@ class VGSCollect {
     tokenizationConfig?: VGSTokenizationConfiguration,
     type?: VGSInputType,
     validationRules: ValidationRule[] = [],
-    updateCallback?: FieldUpdateCallback
-  ) {
+    updateCallback?: FieldUpdateCallback,
+    getRawValue?: () => string
+  ): ((rawInput: string) => void) | undefined {
     this.fields[fieldName] = {
       getSubmitValue: getSubmitValue,
       getValidationErrors,
+      getRawValue,
       tokenizationConfig,
       type,
       validationRules,
@@ -179,6 +464,28 @@ class VGSCollect {
       AnalyticsEventType.FieldInit,
       AnalyticEventStatus.Success,
       { field: getTypeAnalyticsString(type ?? 'text') }
+    );
+
+    // For card-type fields, return callback for notifying input changes
+    if (type === 'card') {
+      return (rawInput: string) =>
+        this.handlePotentialCardAttributesLookup(fieldName, rawInput);
+    }
+    return undefined;
+  }
+
+  /**
+   * Notifies collector of card field raw input change.
+   * Internal method accessed via callback returned from registerField.
+   *
+   * @param rawInput - Raw card number string (unmasked).
+   * @private
+   */
+  // @ts-expect-error - Used indirectly via callback returned from registerField
+  private notifyCardInputChange(rawInput: string, fieldName?: string): void {
+    this.handlePotentialCardAttributesLookup(
+      fieldName ?? this.findFieldNameByType('card'),
+      rawInput
     );
   }
   /**
@@ -250,7 +557,7 @@ class VGSCollect {
     }
   }
 
-  private buildCmpAPIUrl(path: CardManagementAPIPath): string {
+  private buildCmpAPIUrl(path: string): string {
     const environment = this.environment.toLowerCase();
     const baseUrl =
       environment === 'sandbox'
@@ -260,31 +567,662 @@ class VGSCollect {
     return `${baseUrl}${path}`;
   }
 
+  private buildCmpAnalyticsData(
+    operation: CmpOperation,
+    extraData: Record<string, any> = {}
+  ): Record<string, any> {
+    const content = ['textField'];
+    if (Object.keys(extraData).length > 0) {
+      content.push('custom_data');
+    }
+
+    return {
+      upstream: 'cmp',
+      operation,
+      content,
+    };
+  }
+
+  private buildCmpRequestMeta() {
+    return {
+      _source: 'vgs-collect',
+      _medium: 'rnSDK',
+      ...(this.formAnalyticsDetails.sessionFormId
+        ? { _formId: this.formAnalyticsDetails.sessionFormId }
+        : {}),
+      _version: VGSCOLLECT_SDK_VERSION,
+    };
+  }
+
+  private deepMerge(
+    base: Record<string, any>,
+    override: Record<string, any>
+  ): Record<string, any> {
+    const result: Record<string, any> = { ...base };
+
+    for (const [key, value] of Object.entries(override)) {
+      const existingValue = result[key];
+      if (
+        value &&
+        typeof value === 'object' &&
+        !Array.isArray(value) &&
+        existingValue &&
+        typeof existingValue === 'object' &&
+        !Array.isArray(existingValue)
+      ) {
+        result[key] = this.deepMerge(existingValue, value);
+      } else {
+        result[key] = value;
+      }
+    }
+
+    return result;
+  }
+
+  private isRecord(value: unknown): value is Record<string, any> {
+    return value !== null && typeof value === 'object' && !Array.isArray(value);
+  }
+
+  private getErrorStatusCode(error: unknown): number {
+    if (!this.isRecord(error)) {
+      return 0;
+    }
+
+    const code = error.code;
+    return typeof code === 'number' && Number.isFinite(code) ? code : 0;
+  }
+
+  private async getOrFetchJwt(options: {
+    analyticsData?: Record<string, any>;
+    authHandlerMessage: string;
+    forceRefresh?: boolean;
+  }): Promise<string> {
+    const { analyticsData, authHandlerMessage, forceRefresh = false } = options;
+
+    if (forceRefresh) {
+      this.cachedJwtToken = undefined;
+    }
+
+    if (this.cachedJwtToken) {
+      return this.cachedJwtToken;
+    }
+
+    if (!this.authHandler) {
+      const error = new VGSError(
+        VGSErrorCode.AuthHandlerNotSet,
+        authHandlerMessage
+      );
+      this.trackBeforeSubmitFailure(error.code, analyticsData);
+      throw error;
+    }
+
+    const authHandler = this.authHandler;
+    const authHandlerGeneration = this.authHandlerGeneration;
+    let token: string;
+
+    try {
+      token = await authHandler();
+    } catch (error) {
+      if (analyticsData) {
+        this.trackBeforeSubmitFailure(
+          this.getErrorStatusCode(error),
+          analyticsData
+        );
+      }
+      throw error;
+    }
+
+    const normalizedToken = this.normalizeAccessToken(token);
+    this.validateAccessToken(normalizedToken, analyticsData);
+    if (
+      this.authHandler === authHandler &&
+      this.authHandlerGeneration === authHandlerGeneration
+    ) {
+      this.cachedJwtToken = normalizedToken;
+    }
+    return normalizedToken;
+  }
+
+  private trackBeforeSubmitFailure(
+    failure: number | string,
+    extraData?: Record<string, any>
+  ) {
+    const failureData =
+      typeof failure === 'number'
+        ? { statusCode: failure, ...extraData }
+        : { error: failure, ...extraData };
+
+    this.analyticsClient.trackFormEvent(
+      this.formAnalyticsDetails,
+      AnalyticsEventType.BeforeSubmit,
+      AnalyticEventStatus.Failed,
+      failureData
+    );
+  }
+
+  private makeCmpInputValidationError(
+    requiredFields: string[],
+    invalidFields: string[]
+  ): VGSError {
+    const details: Record<string, string[]> = {};
+
+    if (requiredFields.length > 0) {
+      details[CMP_REQUIRED_FIELDS_KEY] = requiredFields;
+      this.logger.log({
+        severity: VGSLogSeverity.WARNING,
+        text: `CMP request validation failed. Required fields are empty or missing: ${requiredFields.join(
+          ', '
+        )}`,
+        logLevel: VGSLogLevel.WARNING,
+      });
+    }
+
+    if (invalidFields.length > 0) {
+      details[CMP_INVALID_FIELDS_KEY] = invalidFields;
+      this.logger.log({
+        severity: VGSLogSeverity.WARNING,
+        text: `CMP request validation failed. Fields did not pass validation: ${invalidFields.join(
+          ', '
+        )}`,
+        logLevel: VGSLogLevel.WARNING,
+      });
+    }
+
+    return new VGSError(
+      VGSErrorCode.InputDataIsNotValid,
+      'VGSCollect: Input data not valid!',
+      details
+    );
+  }
+
+  private collectUpdateCardAttributes(
+    analyticsData: Record<string, any>,
+    extraData: Record<string, any> = {}
+  ): Record<string, any> {
+    const unsupportedFields = Object.keys(extraData).filter(
+      (fieldName) => !CMP_UPDATE_ALLOWED_FIELDS.has(fieldName)
+    );
+    const attributes: Record<string, any> = Object.fromEntries(
+      Object.entries(extraData).filter(([fieldName]) =>
+        CMP_UPDATE_ALLOWED_FIELDS.has(fieldName)
+      )
+    );
+    const invalidFields: string[] = [...unsupportedFields];
+
+    const cvcFieldEntry = this.getFieldEntryByType('cvc');
+    if (cvcFieldEntry) {
+      const [fieldName, field] = cvcFieldEntry;
+      const cvcValue = this.getFieldRawValue(field).trim();
+      const effectiveFieldName = fieldName || 'cvc';
+
+      if (cvcValue && field.getValidationErrors().length > 0) {
+        invalidFields.push(effectiveFieldName);
+      } else if (cvcValue) {
+        attributes.cvc = cvcValue;
+      }
+    }
+
+    const expDateFieldEntry = this.getFieldEntryByType('expDate');
+    if (expDateFieldEntry) {
+      const [fieldName, field] = expDateFieldEntry;
+      const expDateValue = this.getFieldRawValue(field).trim();
+      const effectiveFieldName = fieldName || 'expDate';
+
+      if (expDateValue) {
+        if (field.getValidationErrors().length > 0) {
+          invalidFields.push(effectiveFieldName);
+        } else {
+          const parsedExpiration = this.parseUpdateCardExpiration(expDateValue);
+          if (!parsedExpiration) {
+            invalidFields.push(effectiveFieldName);
+          } else {
+            attributes.exp_month = parsedExpiration.month;
+            attributes.exp_year = parsedExpiration.year;
+          }
+        }
+      }
+    }
+
+    if (invalidFields.length > 0) {
+      const error = this.makeCmpInputValidationError([], invalidFields);
+      this.trackBeforeSubmitFailure(error.code, analyticsData);
+      throw error;
+    }
+
+    if (Object.keys(attributes).length === 0) {
+      const error = this.makeCmpInputValidationError(
+        ['cvc, exp_month, or exp_year'],
+        []
+      );
+      this.trackBeforeSubmitFailure(error.code, analyticsData);
+      throw error;
+    }
+
+    return attributes;
+  }
+
+  private parseUpdateCardExpiration(
+    value: string
+  ): { month: number; year: number } | null {
+    const digits = value.replace(/\D/g, '');
+    if (digits.length !== 4) {
+      return null;
+    }
+
+    const month = Number.parseInt(digits.slice(0, 2), 10);
+    const year = Number.parseInt(digits.slice(2), 10);
+
+    if (!Number.isInteger(month) || !Number.isInteger(year)) {
+      return null;
+    }
+
+    return {
+      month,
+      year,
+    };
+  }
+
+  private getFieldEntryByType(
+    inputType: string
+  ): [string, FieldConfig] | undefined {
+    return Object.entries(this.fields).find(
+      ([, field]) => field && field.type === inputType
+    );
+  }
+
+  private getFieldRawValue(field: FieldConfig): string {
+    const rawValue = field.getRawValue?.();
+    if (typeof rawValue === 'string') {
+      return rawValue;
+    }
+
+    const submitValue = field.getSubmitValue();
+    if (typeof submitValue === 'string') {
+      return submitValue;
+    }
+
+    if (submitValue && typeof submitValue === 'object') {
+      const expMonth = submitValue.exp_month;
+      const expYear = submitValue.exp_year;
+      if (typeof expMonth === 'string' && typeof expYear === 'string') {
+        return `${expMonth}${expYear}`;
+      }
+    }
+
+    return '';
+  }
+
+  private redactHeaders(
+    headers: Record<string, string>
+  ): Record<string, string> {
+    return {
+      ...headers,
+      Authorization: headers.Authorization ? 'Bearer [REDACTED]' : '',
+    };
+  }
+
+  private redactCmpPayload(payload: Record<string, any>): Record<string, any> {
+    const redactedPayload = {
+      ...payload,
+      data:
+        payload.data && typeof payload.data === 'object'
+          ? {
+              ...payload.data,
+              attributes: this.redactAttributeValues(
+                payload.data.attributes ?? {}
+              ),
+            }
+          : payload.data,
+    };
+
+    return redactedPayload;
+  }
+
+  private redactAttributeValues(attributes: Record<string, any>) {
+    return Object.fromEntries(
+      Object.entries(attributes).map(([key]) => [key, '[REDACTED]'])
+    );
+  }
+
+  private isAuthFailureStatus(status: number): boolean {
+    return status === 401 || status === 403;
+  }
+
+  private normalizeAccessToken(token: unknown): string {
+    const normalizedToken = typeof token === 'string' ? token.trim() : '';
+    return normalizedToken.replace(/^Bearer(?:\s+|$)/i, '').trim();
+  }
+
+  private buildAuthorizationHeader(token: string): string {
+    return `Bearer ${token}`;
+  }
+
+  private normalizeCardId(cardId: string): string | null {
+    const normalizedCardId = cardId.trim();
+    if (
+      !normalizedCardId ||
+      normalizedCardId.includes('/') ||
+      normalizedCardId === '.' ||
+      normalizedCardId === '..'
+    ) {
+      return null;
+    }
+    return normalizedCardId;
+  }
+
+  private parseCmpInteger(
+    value: unknown,
+    minimum: number,
+    maximum: number
+  ): number | null {
+    const normalizedValue =
+      typeof value === 'number'
+        ? value
+        : typeof value === 'string' && /^\d+$/.test(value)
+          ? Number.parseInt(value, 10)
+          : Number.NaN;
+
+    return Number.isInteger(normalizedValue) &&
+      normalizedValue >= minimum &&
+      normalizedValue <= maximum
+      ? normalizedValue
+      : null;
+  }
+
+  private buildCreateCardAttributes(
+    fieldValues: Record<string, any>,
+    extraData: Record<string, any>,
+    analyticsData: Record<string, any>
+  ): Record<string, any> {
+    const attributes = this.deepMerge({}, extraData);
+    const requiredFields: string[] = [];
+    const invalidFields: string[] = [];
+    const pan = fieldValues.pan;
+    const expMonth = this.parseCmpInteger(fieldValues.exp_month, 1, 12);
+    const expYear = this.parseCmpInteger(fieldValues.exp_year, 0, 99);
+
+    for (const fieldName of CMP_CREATE_REQUIRED_FIELDS) {
+      if (fieldValues[fieldName] === undefined || fieldValues[fieldName] === '') {
+        requiredFields.push(fieldName);
+      }
+    }
+
+    if (pan !== undefined && (typeof pan !== 'string' || pan.trim() === '')) {
+      invalidFields.push('pan');
+    }
+    if (fieldValues.exp_month !== undefined && expMonth === null) {
+      invalidFields.push('exp_month');
+    }
+    if (fieldValues.exp_year !== undefined && expYear === null) {
+      invalidFields.push('exp_year');
+    }
+
+    if (requiredFields.length > 0 || invalidFields.length > 0) {
+      const error = this.makeCmpInputValidationError(
+        requiredFields,
+        invalidFields
+      );
+      this.trackBeforeSubmitFailure(error.code, analyticsData);
+      throw error;
+    }
+
+    attributes.pan = pan;
+    attributes.exp_month = expMonth;
+    attributes.exp_year = expYear;
+    if (fieldValues.cvc !== undefined) {
+      attributes.cvc = fieldValues.cvc;
+    }
+    if (fieldValues.cardholder !== undefined) {
+      const cardholder =
+        attributes.cardholder &&
+        typeof attributes.cardholder === 'object' &&
+        !Array.isArray(attributes.cardholder)
+          ? { ...attributes.cardholder }
+          : {};
+      cardholder.name = fieldValues.cardholder;
+      attributes.cardholder = cardholder;
+    }
+
+    return attributes;
+  }
+
+  private buildCreateCardPayload(
+    fieldValues: Record<string, any>,
+    extraData: Record<string, any>,
+    analyticsData: Record<string, any>
+  ): Record<string, any> {
+    const wrappedData = this.isRecord(extraData.data) ? extraData.data : null;
+    const wrappedAttributes =
+      wrappedData && this.isRecord(wrappedData.attributes)
+        ? wrappedData.attributes
+        : null;
+    const attributeExtraData = wrappedData
+      ? (wrappedAttributes ?? {})
+      : extraData;
+    const sdkPayload = {
+      data: {
+        attributes: this.buildCreateCardAttributes(
+          fieldValues,
+          attributeExtraData,
+          analyticsData
+        ),
+        meta: this.buildCmpRequestMeta(),
+      },
+    };
+
+    return wrappedData ? this.deepMerge(extraData, sdkPayload) : sdkPayload;
+  }
+
   /**
-   * Creates a card via Card Management API.
-   * Validates `token` and input fields, sets required headers, then POSTs to CMP.
+   * Creates a card via Card Management API with explicit JWT token.
+   * Prefer createCard() with authHandler when automatic token management is wanted.
    *
    * @param token - JWT Access token (`Authorization: Bearer <token>`).
-   * @param extraData - Optional additional payload merged with `{ data: { attributes } }`.
+   * @param extraData - Optional attributes, or a legacy `{ data: { attributes } }` envelope.
    * @returns Promise resolving `{ status, response }` (native Fetch Response).
    * @throws {VGSError} If access token invalid or inputs fail validation.
    */
-  public async createCard(token: string, extraData: Record<string, string> = {}): Promise<{ status: number; response: any }> {
-    // will throw VGSError if validation fails
-    this.validateAccessToken(token)
-    this.validateFields();
-    // set CMP API headers
-    const headers = {"Content-Type": "application/vnd.api+json",
-                      "Authorization": "Bearer "+token }
-    this.setCustomHeaders(headers);
-    // prepare cmp json data
-    const fieldsData = await this.collectFieldData();
-    const cmpData = { data: { attributes: fieldsData } };
-    // Merge non-input extraData with the wrapped input data.
-    const submitData = { ...cmpData, ...extraData };
-    // get the URL for the cmp API
+  public async createCardWithToken(
+    token: string,
+    extraData?: Record<string, any>
+  ): Promise<{ status: number; response: any }> {
+    return this.performCreateCard(token, extraData ?? {});
+  }
+
+  /**
+   * Creates a card via Card Management API. The object form uses authHandler;
+   * the legacy string form uses the supplied token without caching or refresh.
+   *
+   * @param extraData - Optional attributes, or a legacy `{ data: { attributes } }` envelope.
+   * @param token - Legacy explicit JWT token overload.
+   * @returns Promise resolving `{ status, response }` (native Fetch Response).
+   * @throws {VGSError} If authHandler not set, inputs fail validation, or request fails.
+   */
+  public async createCard(
+    extraData?: Record<string, any>
+  ): Promise<{ status: number; response: any }>;
+  public async createCard(
+    token: string,
+    extraData?: Record<string, any>
+  ): Promise<{ status: number; response: any }>;
+  public async createCard(
+    tokenOrExtraData?: string | Record<string, any>,
+    extraData?: Record<string, any>
+  ): Promise<{ status: number; response: any }> {
+    if (typeof tokenOrExtraData === 'string') {
+      return this.createCardWithToken(tokenOrExtraData, extraData);
+    }
+
+    return this.createCardWithAuthHandler(tokenOrExtraData ?? {});
+  }
+
+  /**
+   * Internal method to create card using authHandler with automatic token refresh on expiration.
+   */
+  private async createCardWithAuthHandler(
+    extraData: Record<string, any>
+  ): Promise<{ status: number; response: any }> {
+    const analyticsData = this.buildCmpAnalyticsData('cardCreate', extraData);
+    const requestSnapshot: CmpRequestSnapshot = {};
+    const token = await this.getOrFetchJwt({
+      analyticsData,
+      authHandlerMessage:
+        'authHandler is required for createCard(). Set it via setAuthHandler() or provide token directly.',
+    });
+    const result = await this.performCreateCard(
+      token,
+      extraData,
+      requestSnapshot
+    );
+
+    if (this.isAuthFailureStatus(result.status)) {
+      const refreshedToken = await this.getOrFetchJwt({
+        analyticsData,
+        forceRefresh: true,
+        authHandlerMessage:
+          'authHandler is required for createCard(). Set it via setAuthHandler() or provide token directly.',
+      });
+      return this.performCreateCard(
+        refreshedToken,
+        extraData,
+        requestSnapshot
+      );
+    }
+
+    return result;
+  }
+
+  /**
+   * Internal method to perform the actual card creation request.
+   */
+  private async performCreateCard(
+    token: string,
+    extraData: Record<string, any>,
+    requestSnapshot: CmpRequestSnapshot = {}
+  ): Promise<{ status: number; response: any }> {
+    const analyticsData = this.buildCmpAnalyticsData('cardCreate', extraData);
+    const normalizedToken = this.normalizeAccessToken(token);
+    this.validateAccessToken(normalizedToken, analyticsData);
+    const headers = {
+      'Content-Type': 'application/vnd.api+json',
+      'Authorization': this.buildAuthorizationHeader(normalizedToken),
+    };
+    if (!requestSnapshot.payload) {
+      this.validateFields(analyticsData);
+      const fieldsData = await this.collectFieldData();
+      requestSnapshot.payload = this.buildCreateCardPayload(
+        fieldsData,
+        extraData,
+        analyticsData
+      );
+    }
+    const submitData = requestSnapshot.payload;
     const url = this.buildCmpAPIUrl(CardManagementAPIPath.Cards);
-    return this.submitDataToServer(url, 'POST', submitData, { upstream: 'cmp' });
+    return this.submitDataToServer(url, 'POST', submitData, analyticsData, {
+      requestHeaders: headers,
+      logOverrides: {
+        headers: this.redactHeaders(headers),
+        payload: this.redactCmpPayload(submitData),
+      },
+    });
+  }
+
+  /**
+   * Updates an existing card via Card Management API using authHandler for JWT token.
+   * Only `cvc`, `exp_month`, and `exp_year` are accepted update attributes.
+   * Automatically retries once with a refreshed token on 401/403.
+   */
+  public async updateCard(
+    cardId: string,
+    extraData: Record<string, any> = {}
+  ): Promise<{ status: number; response: any }> {
+    const analyticsData = this.buildCmpAnalyticsData('cardUpdate', extraData);
+    const requestSnapshot: CmpRequestSnapshot = {};
+    const normalizedCardId = this.normalizeCardId(cardId);
+
+    if (!normalizedCardId) {
+      const error = this.makeCmpInputValidationError(['cardId'], []);
+      throw error;
+    }
+
+    const token = await this.getOrFetchJwt({
+      analyticsData,
+      authHandlerMessage:
+        'authHandler is required for updateCard(). Set it via setAuthHandler().',
+    });
+    const result = await this.performUpdateCard(
+      normalizedCardId,
+      token,
+      extraData,
+      requestSnapshot
+    );
+
+    if (this.isAuthFailureStatus(result.status)) {
+      const refreshedToken = await this.getOrFetchJwt({
+        analyticsData,
+        forceRefresh: true,
+        authHandlerMessage:
+          'authHandler is required for updateCard(). Set it via setAuthHandler().',
+      });
+      return this.performUpdateCard(
+        normalizedCardId,
+        refreshedToken,
+        extraData,
+        requestSnapshot
+      );
+    }
+
+    return result;
+  }
+
+  /** Updates an existing card using an explicit token without caching it. */
+  public async updateCardWithToken(
+    cardId: string,
+    token: string,
+    extraData: Record<string, any> = {}
+  ): Promise<{ status: number; response: any }> {
+    const normalizedCardId = this.normalizeCardId(cardId);
+    if (!normalizedCardId) {
+      const error = this.makeCmpInputValidationError(['cardId'], []);
+      throw error;
+    }
+    return this.performUpdateCard(normalizedCardId, token, extraData);
+  }
+
+  private async performUpdateCard(
+    cardId: string,
+    token: string,
+    extraData: Record<string, any> = {},
+    requestSnapshot: CmpRequestSnapshot = {}
+  ): Promise<{ status: number; response: any }> {
+    const analyticsData = this.buildCmpAnalyticsData('cardUpdate', extraData);
+    const normalizedToken = this.normalizeAccessToken(token);
+    this.validateAccessToken(normalizedToken, analyticsData);
+    const headers = {
+      'Content-Type': 'application/vnd.api+json',
+      'Authorization': this.buildAuthorizationHeader(normalizedToken),
+    };
+    if (!requestSnapshot.payload) {
+      const attributes = this.collectUpdateCardAttributes(
+        analyticsData,
+        extraData
+      );
+      requestSnapshot.payload = {
+        data: { attributes },
+      };
+    }
+    const submitData = requestSnapshot.payload;
+    const url = this.buildCmpAPIUrl(
+      `${CardManagementAPIPath.Cards}/${encodeURIComponent(cardId)}`
+    );
+
+    return this.submitDataToServer(url, 'PATCH', submitData, analyticsData, {
+      requestHeaders: headers,
+      logOverrides: {
+        headers: this.redactHeaders(headers),
+        payload: this.redactCmpPayload(submitData),
+      },
+    });
   }
 
   /**
@@ -473,7 +1411,7 @@ class VGSCollect {
    * Validates all registered fields via `getValidationErrors()`.
    * Throws `VGSError` with `VGSErrorCode.InputDataIsNotValid` when any field has errors.
    */
-  private validateFields() {
+  private validateFields(analyticsData?: Record<string, any>) {
     const errors: Record<string, string[]> = {};
     for (const fieldName in this.fields) {
       const field = this.fields[fieldName];
@@ -486,12 +1424,7 @@ class VGSCollect {
     }
     if (Object.keys(errors).length > 0) {
       const errorCode = VGSErrorCode.InputDataIsNotValid;
-      this.analyticsClient.trackFormEvent(
-        this.formAnalyticsDetails,
-        AnalyticsEventType.BeforeSubmit,
-        AnalyticEventStatus.Failed,
-        { statusCode: errorCode }
-      );
+      this.trackBeforeSubmitFailure(errorCode, analyticsData);
       this.logger.log({
         severity: VGSLogSeverity.WARNING,
         text: `Input data not valid in fields: ${Object.keys(errors)}`,
@@ -509,25 +1442,22 @@ class VGSCollect {
    * Validates the Card Management access token.
    * Throws `VGSError` with `VGSErrorCode.IvalidAccessToken` if empty.
    */
-  private validateAccessToken(token: string) {
+  private validateAccessToken(
+    token: string,
+    analyticsData?: Record<string, any>
+  ): void {
     if (token.length > 0) {
-      return
+      return;
     }
-      const errorCode = VGSErrorCode.IvalidAccessToken;
-      this.analyticsClient.trackFormEvent(
-        this.formAnalyticsDetails,
-        AnalyticsEventType.BeforeSubmit,
-        AnalyticEventStatus.Failed,
-        { statusCode: errorCode }
-      );
-      this.logger.log({
-        severity: VGSLogSeverity.ERROR,
-        text: `Access token is required for -createCard(:) request!`,
-        logLevel: VGSLogLevel.WARNING,
-      });
-      throw new VGSError(
-        errorCode,
-        'VGSCollect: Access token is null or empty!');
+
+    const errorCode = VGSErrorCode.IvalidAccessToken;
+    this.trackBeforeSubmitFailure(errorCode, analyticsData);
+    this.logger.log({
+      severity: VGSLogSeverity.ERROR,
+      text: `Access token is required for authenticated CMP request.`,
+      logLevel: VGSLogLevel.WARNING,
+    });
+    throw new VGSError(errorCode, 'VGSCollect: Access token is null or empty!');
   }
 
   /**
@@ -544,43 +1474,65 @@ class VGSCollect {
     url: string,
     method: string,
     data: Record<string, any>,
-    analyticsData?: Record<string, any>
+    analyticsData?: Record<string, any>,
+    options?: {
+      requestHeaders?: Record<string, string>;
+      logOverrides?: RequestLogOverrides;
+    }
   ): Promise<{ status: number; response: any } | never> {
     try {
       const headers = {
         'Content-Type': 'application/json',
         ...VGSAnalyticsClient.getInstance().collectHTTPHeaders,
         ...this.customHeaders,
+        ...options?.requestHeaders,
       };
-      this.logger.logRequest(url, headers, data);
+      this.logger.logRequest(
+        url,
+        options?.logOverrides?.headers ?? headers,
+        options?.logOverrides?.payload ?? data
+      );
       this.analyticsClient.trackFormEvent(
         this.formAnalyticsDetails,
         AnalyticsEventType.BeforeSubmit,
         AnalyticEventStatus.Success,
-        { statusCode: 200, analyticsData }
+        { statusCode: 200, ...analyticsData }
       );
       const response = await fetch(url, {
         method,
-        headers: headers,
+        headers,
         body: JSON.stringify(data),
       });
       this.analyticsClient.trackFormEvent(
         this.formAnalyticsDetails,
         AnalyticsEventType.Submit,
         response.ok ? AnalyticEventStatus.Success : AnalyticEventStatus.Failed,
-        { statusCode: response.status, analyticsData }
+        {
+          statusCode: response.status,
+          ...(!response.ok && analyticsData?.upstream === 'cmp'
+            ? { error: 'request_failed' }
+            : {}),
+          ...analyticsData,
+        }
       );
       return { status: response.status, response };
     } catch (error) {
-      var errorMessage = 'unknown error';
-      if (error instanceof Error) {
-        errorMessage = error.message;
-      }
+      const errorMessage = 'transport_error';
+      this.logger.logRequestError(
+        error instanceof Error ? error : new Error(errorMessage),
+        url,
+        options?.logOverrides?.headers ?? options?.requestHeaders ?? {},
+        options?.logOverrides?.payload ?? data
+      );
       this.analyticsClient.trackFormEvent(
         this.formAnalyticsDetails,
         AnalyticsEventType.Submit,
         AnalyticEventStatus.Failed,
-        { error: errorMessage, analyticsData }
+        {
+          statusCode: this.getErrorStatusCode(error),
+          error: errorMessage,
+          ...analyticsData,
+        }
       );
       throw error;
     }
@@ -709,9 +1661,7 @@ class VGSCollect {
    * @returns Matching field name or `undefined`.
    */
   findFieldNameByType(inputType: string): string | undefined {
-    return Object.keys(this.fields).find(
-      (fName) => this.fields[fName] && this.fields[fName].type === inputType
-    );
+    return this.getFieldEntryByType(inputType)?.[0];
   }
 
   /**
@@ -747,7 +1697,697 @@ class VGSCollect {
     return template;
   }
 
-  private validateConfig(tenantId: string, env: string) {
+  // MARK: - Card Attributes Lookup
+
+  /**
+   * Entry point invoked when a card field's raw input changes.
+   * Triggers lookup at 11 digits if includedCardAttributes is configured.
+   *
+   * @param rawInput - Raw card number string (digits only).
+   */
+  private handlePotentialCardAttributesLookup(
+    fieldName: string | undefined,
+    rawInput: string
+  ) {
+    if (this.includedCardAttributes.length === 0) {
+      return;
+    }
+
+    const digitsOnly = rawInput.replace(/\D/g, '');
+
+    if (digitsOnly.length < 11) {
+      if (this.inFlightDigits11) {
+        delete this.lookupStartedAt[this.inFlightDigits11];
+      }
+      this.requestedDigits11 = undefined;
+      this.inFlightDigits11 = undefined;
+      return;
+    }
+
+    if (!fieldName || this.findFieldNameByType('card') !== fieldName) {
+      return;
+    }
+
+    const first11 = digitsOnly.slice(0, 11);
+
+    if (
+      this.requestedDigits11 === first11 ||
+      this.inFlightDigits11 === first11
+    ) {
+      return;
+    }
+
+    this.requestedDigits11 = first11;
+    this.inFlightDigits11 = first11;
+    this.lookupStartedAt[first11] = Date.now();
+    this.willBeginCardAttributesLookup?.();
+
+    void this.performCardAttributesRequest(first11);
+  }
+
+  /**
+   * Performs card attributes lookup request to enrichment API.
+   *
+   * @param digits11 - First 11 digits of card number.
+   */
+  private async performCardAttributesRequest(
+    digits11: string,
+    isRetry: boolean = false
+  ): Promise<void> {
+    const requestUrl = this.buildCardAttributesLookupUrl();
+    const payload = {
+      number: digits11,
+      filter: this.includedCardAttributes,
+    };
+    const baseHeaders: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    const logHeaders = this.redactHeaders({
+      ...baseHeaders,
+      Authorization: 'Bearer [REDACTED]',
+    });
+    const logPayload = {
+      ...payload,
+      number: '[REDACTED]',
+    };
+    let headers = baseHeaders;
+
+    try {
+      const token = await this.getOrFetchJwt({
+        authHandlerMessage:
+          'authHandler is required for card attributes lookup.',
+        forceRefresh: isRetry,
+      });
+      headers = {
+        ...baseHeaders,
+        Authorization: this.buildAuthorizationHeader(token),
+      };
+    } catch (error) {
+      const lookupError =
+        error instanceof VGSError
+          ? error
+          : new VGSError(
+              VGSErrorCode.IvalidAccessToken,
+              `Auth handler failed to provide token: ${
+                error instanceof Error ? error.message : 'Unknown auth error.'
+              }`,
+              { error }
+            );
+      this.finishLookupIfCurrent(
+        digits11,
+        this.makeLookupFailureResponse(lookupError)
+      );
+      return;
+    }
+
+    this.logger.log({
+      severity: VGSLogSeverity.WARNING,
+      text: `Card attributes lookup request method: POST`,
+      logLevel: VGSLogLevel.WARNING,
+    });
+    this.logger.logRequest(requestUrl, logHeaders, logPayload);
+
+    try {
+      const response = await fetch(requestUrl, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload),
+      });
+
+      if (!isResponseLike(response)) {
+        const error = new VGSError(
+          VGSErrorCode.UnexpectedResponseType,
+          'Card attributes lookup response is invalid.'
+        );
+        this.finishLookupIfCurrent(
+          digits11,
+          this.makeLookupFailureResponse(error, response)
+        );
+        return;
+      }
+
+      const parsedData = await this.readResponseBody(response);
+
+      if (!response.ok) {
+        if (!isRetry && this.isAuthFailureStatus(response.status)) {
+          this.cachedJwtToken = undefined;
+          return this.performCardAttributesRequest(digits11, true);
+        }
+        this.finishLookupIfCurrent(
+          digits11,
+          this.makeLookupFailureResponse(
+            undefined,
+            response,
+            parsedData,
+            response.status
+          )
+        );
+        return;
+      }
+
+      const attributes = this.parseCardAttributesResponse(parsedData);
+      if (!attributes) {
+        const error = new VGSError(
+          VGSErrorCode.UnexpectedResponseDataFormat,
+          'Card attributes lookup response has invalid data shape.'
+        );
+        this.finishLookupIfCurrent(
+          digits11,
+          this.makeLookupFailureResponse(error, response, parsedData)
+        );
+        return;
+      }
+
+      this.finishLookupIfCurrent(
+        digits11,
+        {
+          type: 'success',
+          status: response.status,
+          data: attributes,
+          response,
+        },
+        attributes
+      );
+    } catch (error) {
+      const lookupError =
+        error instanceof Error
+          ? error
+          : new Error('Card attributes lookup request failed.');
+      this.logger.logRequestError(
+        lookupError,
+        requestUrl,
+        logHeaders,
+        logPayload
+      );
+      this.finishLookupIfCurrent(
+        digits11,
+        this.makeLookupFailureResponse(lookupError)
+      );
+    }
+  }
+
+  private makeLookupFailureResponse(
+    error?: unknown,
+    response?: any,
+    data?: unknown,
+    statusOverride?: number
+  ): VGSCardAttributesLookupResponse {
+    if (error instanceof VGSError) {
+      return {
+        type: 'failure',
+        status: error.code,
+        data,
+        response,
+        error,
+      };
+    }
+
+    if (error instanceof Error) {
+      const maybeErrorCode = (error as Error & { code?: number }).code;
+      const errorCode =
+        typeof maybeErrorCode === 'number'
+          ? maybeErrorCode
+          : (statusOverride ?? 0);
+      return {
+        type: 'failure',
+        status: errorCode,
+        data,
+        response,
+        error,
+      };
+    }
+
+    return {
+      type: 'failure',
+      status:
+        statusOverride ?? (isResponseLike(response) ? response.status : 0),
+      data,
+      response,
+    };
+  }
+
+  private async readResponseBody(response: {
+    json?: () => Promise<unknown>;
+    text?: () => Promise<string>;
+    clone?: () => any;
+  }): Promise<unknown> {
+    const jsonReader =
+      typeof response.clone === 'function' ? response.clone() : response;
+
+    if (typeof jsonReader.json === 'function') {
+      try {
+        return await jsonReader.json();
+      } catch {
+        // Try reading the body as text to preserve non-JSON error payloads.
+      }
+    }
+
+    const textReader =
+      typeof response.clone === 'function' ? response.clone() : response;
+
+    if (typeof textReader.text === 'function') {
+      try {
+        return await textReader.text();
+      } catch {
+        return undefined;
+      }
+    }
+
+    return undefined;
+  }
+
+  private parseCardAttributesResponse(data: unknown): VGSCardAttributes | null {
+    if (!data || typeof data !== 'object' || Array.isArray(data)) {
+      return null;
+    }
+
+    if (Object.keys(data).length === 0) {
+      return null;
+    }
+
+    return data as VGSCardAttributes;
+  }
+
+  private trackCardLookupEvent(
+    response: VGSCardAttributesLookupResponse,
+    startedAt?: number
+  ) {
+    this.analyticsClient.trackFormEvent(
+      this.formAnalyticsDetails,
+      AnalyticsEventType.CardLookup,
+      response.type === 'success'
+        ? AnalyticEventStatus.Success
+        : AnalyticEventStatus.Failed,
+      {
+        error: this.cardLookupAnalyticsError(response),
+        statusCode: this.cardLookupAnalyticsStatusCode(response),
+        latency:
+          typeof startedAt === 'number'
+            ? Math.max(Date.now() - startedAt, 0)
+            : 0,
+      }
+    );
+  }
+
+  private cardLookupAnalyticsStatusCode(
+    response: VGSCardAttributesLookupResponse
+  ): number | null {
+    return isResponseLike(response.response) ? response.response.status : null;
+  }
+
+  private cardLookupAnalyticsError(
+    response: VGSCardAttributesLookupResponse
+  ): string {
+    if (response.type === 'success') {
+      return '';
+    }
+    if (isResponseLike(response.response) && !response.response.ok) {
+      return 'http_error';
+    }
+    if (response.error instanceof VGSError) {
+      return 'invalid_response';
+    }
+    if (response.error instanceof Error) {
+      return 'network_error';
+    }
+    return 'unknown_error';
+  }
+
+  private buildLookupError(response: VGSCardAttributesLookupResponse): Error {
+    if (response.type === 'failure' && response.error) {
+      return response.error;
+    }
+
+    return new Error(
+      `Card attributes lookup failed with status: ${response.status}`
+    );
+  }
+
+  private clearLookupState() {
+    this.inFlightDigits11 = undefined;
+  }
+
+  private buildCardAttributesLookupUrl(): string {
+    if (VGSCollect.cardAttributesLookupEndpointOverride === 'sandbox') {
+      return VGSCollect.CARD_ATTRIBUTES_LOOKUP_SANDBOX_URL;
+    }
+    if (VGSCollect.cardAttributesLookupEndpointOverride === 'production') {
+      return VGSCollect.CARD_ATTRIBUTES_LOOKUP_PRODUCTION_URL;
+    }
+    return this.environment.startsWith('live')
+      ? VGSCollect.CARD_ATTRIBUTES_LOOKUP_PRODUCTION_URL
+      : VGSCollect.CARD_ATTRIBUTES_LOOKUP_SANDBOX_URL;
+  }
+
+  /**
+   * Validates and delivers lookup result only if request is still current.
+   * Guards against race conditions when user edits card number during lookup.
+   *
+   * @param digits11 - First 11 digits from original request.
+   * @param lookupResponse - Success or failure response payload.
+   * @param attributes - Card attributes if lookup succeeded.
+   */
+  private finishLookupIfCurrent(
+    digits11: string,
+    lookupResponse: VGSCardAttributesLookupResponse,
+    attributes?: VGSCardAttributes
+  ): void {
+    const startedAt = this.lookupStartedAt[digits11];
+    delete this.lookupStartedAt[digits11];
+
+    if (this.inFlightDigits11 !== digits11) {
+      return;
+    }
+
+    const cardField = this.getFieldEntryByType('card')?.[1];
+    if (!cardField) {
+      this.clearLookupState();
+      return;
+    }
+
+    const currentDigitsOnly = this.getFieldRawValue(cardField).replace(
+      /\D/g,
+      ''
+    );
+    if (
+      currentDigitsOnly.length < 11 ||
+      currentDigitsOnly.slice(0, 11) !== digits11
+    ) {
+      this.clearLookupState();
+      return;
+    }
+
+    this.trackCardLookupEvent(lookupResponse, startedAt);
+    this.clearLookupState();
+
+    try {
+      this.cardAttributesLookupResponse?.(lookupResponse);
+    } catch (callbackError) {
+      this.logger.log({
+        severity: VGSLogSeverity.WARNING,
+        text: `Card attributes response callback details: ${String(
+          callbackError
+        )}`,
+        logLevel: VGSLogLevel.WARNING,
+      });
+    }
+
+    if (lookupResponse.type === 'failure') {
+      try {
+        this.didFailToRetrieveCardAttributes?.(
+          this.buildLookupError(lookupResponse)
+        );
+      } catch (callbackError) {
+        this.logger.log({
+          severity: VGSLogSeverity.WARNING,
+          text: `Card attributes failure callback details: ${String(
+            callbackError
+          )}`,
+          logLevel: VGSLogLevel.WARNING,
+        });
+      }
+      return;
+    }
+
+    if (!attributes) {
+      return;
+    }
+
+    try {
+      this.didRetrieveCardAttributes?.(attributes);
+    } catch (callbackError) {
+      this.logger.log({
+        severity: VGSLogSeverity.WARNING,
+        text: `Card attributes success callback details: ${String(
+          callbackError
+        )}`,
+        logLevel: VGSLogLevel.WARNING,
+      });
+    }
+  }
+
+  /**
+   * Validates form parameter format.
+   * @param form - Form identifier to validate.
+   * @throws {VGSError} If form is invalid.
+   */
+  private static validateForm(form: string) {
+    const pattern = /^[A-Za-z0-9_-]+$/;
+    if (
+      !form ||
+      typeof form !== 'string' ||
+      form.length > 50 ||
+      !pattern.test(form)
+    ) {
+      throw new VGSError(
+        VGSErrorCode.InvalidFormConfiguration,
+        'VGSCollect.session() Error: Invalid form parameter!'
+      );
+    }
+  }
+
+  private static getCollectS3FileName(form: string): string {
+    return VGSCollect.encodeUtf8Hex(form);
+  }
+
+  private static normalizeSessionForm(form: string) {
+    const normalizedForm = form.trim();
+    return normalizedForm.length > 0 ? normalizedForm : null;
+  }
+
+  private static buildSessionConfigUrl(form: string, vaultId: string): string {
+    const configFileName = VGSCollect.getCollectS3FileName(form);
+    return `https://js.verygoodvault.com/session-configuration/${vaultId}/${configFileName}.json`;
+  }
+
+  private static encodeUtf8Hex(value: string): string {
+    const encoded = encodeURIComponent(value);
+    const bytes: number[] = [];
+
+    for (let i = 0; i < encoded.length; i++) {
+      if (encoded[i] === '%') {
+        bytes.push(parseInt(encoded.slice(i + 1, i + 3), 16));
+        i += 2;
+      } else {
+        bytes.push(encoded.charCodeAt(i));
+      }
+    }
+
+    return bytes.map((byte) => byte.toString(16).padStart(2, '0')).join('');
+  }
+
+  private static resolveIncludedCardAttributes(config?: {
+    cardAttributes?: {
+      enable?: boolean;
+      parameters?: string[];
+    };
+  }): string[] {
+    if (config?.cardAttributes?.enable !== true) {
+      return [];
+    }
+
+    const rawParameters = Array.isArray(config.cardAttributes.parameters)
+      ? config.cardAttributes.parameters
+      : [];
+    const sanitized = rawParameters
+      .map((parameter) => parameter.trim())
+      .filter((parameter) => parameter.length > 0);
+
+    return Array.from(new Set(sanitized));
+  }
+
+  private static buildSessionAnalyticsExtraData(metrics?: {
+    configFile: string;
+    statusCode?: number;
+    latency?: number;
+  }) {
+    return {
+      formType: 'session',
+      ...(metrics
+        ? {
+            configFile: metrics.configFile,
+            ...(typeof metrics.statusCode === 'number'
+              ? { configFileStatusCode: metrics.statusCode }
+              : {}),
+            ...(typeof metrics.latency === 'number'
+              ? { configFileLatency: metrics.latency }
+              : {}),
+          }
+        : {}),
+    };
+  }
+
+  /**
+   * Loads configuration for a given form.
+   * Fetches the remote session configuration over HTTPS.
+   * @param form - Form identifier.
+   * @param vaultId - Vault ID.
+   * @returns Promise resolving to configuration object.
+   */
+  private static async loadConfiguration(
+    form: string,
+    vaultId: string
+  ): Promise<SessionConfigurationLoadResult> {
+    const url = VGSCollect.buildSessionConfigUrl(form, vaultId);
+    const configFile = `${VGSCollect.getCollectS3FileName(form)}.json`;
+    const startedAt = Date.now();
+    let response: unknown;
+
+    try {
+      response = await fetch(url, {
+        method: 'GET',
+        headers: { Accept: 'application/json' },
+      });
+    } catch (error) {
+      throw VGSCollect.attachSessionTelemetry(error, {
+        configFile,
+        configFileStatusCode: undefined,
+        configFileLatency: Math.max(Date.now() - startedAt, 0),
+      });
+    }
+
+    const latency = Math.max(Date.now() - startedAt, 0);
+
+    if (!isResponseLike(response)) {
+      throw VGSCollect.attachSessionTelemetry(
+        new VGSError(
+          VGSErrorCode.SessionInitializationFailed,
+          'Session configuration response is invalid.'
+        ),
+        {
+          configFile,
+          configFileStatusCode: undefined,
+          configFileLatency: latency,
+        }
+      );
+    }
+
+    if (!response.ok) {
+      throw VGSCollect.attachSessionTelemetry(response, {
+        configFile,
+        configFileStatusCode: response.status,
+        configFileLatency: latency,
+      });
+    }
+
+    let payload: unknown;
+    try {
+      if (typeof response.json !== 'function') {
+        throw new Error('Session configuration response is not valid JSON.');
+      }
+      payload = await response.json();
+    } catch {
+      throw VGSCollect.attachSessionTelemetry(
+        new VGSError(
+          VGSErrorCode.SessionInitializationFailed,
+          'Session configuration response is not valid JSON.',
+          {
+            statusCode: response.status,
+            latency,
+          }
+        ),
+        {
+          configFile,
+          configFileStatusCode: response.status,
+          configFileLatency: latency,
+        }
+      );
+    }
+
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      throw VGSCollect.attachSessionTelemetry(
+        new VGSError(
+          VGSErrorCode.SessionInitializationFailed,
+          'Session configuration response must be an object.',
+          {
+            statusCode: response.status,
+            latency,
+          }
+        ),
+        {
+          configFile,
+          configFileStatusCode: response.status,
+          configFileLatency: latency,
+        }
+      );
+    }
+
+    return {
+      payload: payload as SessionConfigurationPayload,
+      configFile,
+      configFileStatusCode: response.status,
+      configFileLatency: latency,
+    };
+  }
+
+  private static attachSessionTelemetry<T>(
+    error: T,
+    telemetry: SessionConfigurationLoadTelemetry
+  ): T {
+    if (typeof error === 'object' && error !== null) {
+      (
+        error as T & {
+          sessionConfigTelemetry?: SessionConfigurationLoadTelemetry;
+        }
+      ).sessionConfigTelemetry = telemetry;
+      return error;
+    }
+
+    return Object.assign(new Error('Session configuration request failed.'), {
+      sessionConfigTelemetry: telemetry,
+    }) as T;
+  }
+
+  private static getSessionTelemetryFromError(
+    error: unknown
+  ): SessionConfigurationLoadTelemetry | undefined {
+    if (typeof error !== 'object' || error === null) {
+      return undefined;
+    }
+
+    return (
+      error as { sessionConfigTelemetry?: SessionConfigurationLoadTelemetry }
+    ).sessionConfigTelemetry;
+  }
+
+  private static normalizeSessionConfigurationResult(
+    form: string,
+    config: SessionConfigurationLike
+  ): SessionConfigurationLoadResult {
+    if ('payload' in config && 'configFile' in config) {
+      return config;
+    }
+
+    if ('payload' in config) {
+      return {
+        payload: config.payload,
+        configFile: `${VGSCollect.getCollectS3FileName(form)}.json`,
+        configFileStatusCode: config.statusCode,
+        configFileLatency: config.latency,
+      };
+    }
+
+    return {
+      payload: config,
+      configFile: `${VGSCollect.getCollectS3FileName(form)}.json`,
+      configFileStatusCode: 200,
+      configFileLatency: 0,
+    };
+  }
+
+  private static createCollectorWithoutInitAnalytics(
+    vaultId: string,
+    environment: string
+  ): VGSCollect {
+    VGSCollect.suppressCreateInitAnalytics = true;
+    try {
+      return new VGSCollect(vaultId, environment);
+    } finally {
+      VGSCollect.suppressCreateInitAnalytics = false;
+    }
+  }
+
+  private static validateConfig(tenantId: string, env: string) {
     const pattern = /^[a-zA-Z0-9]+$/;
     if (!tenantId || typeof tenantId !== 'string' || !pattern.test(tenantId)) {
       throw new VGSError(

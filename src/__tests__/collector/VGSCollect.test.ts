@@ -2,7 +2,7 @@
 import VGSCollect from '../../collector/VGSCollect';
 import APIHostnameValidator from '../../utils/url/APIHostnameValidator';
 import { PaymentCardBrandsManager } from '../../utils/paymentCards/PaymentCardBrandsManager';
-import { VGSError } from '../../utils/errors';
+import { VGSError, VGSErrorCode } from '../../utils/errors';
 
 // --- Mocks ---
 // Mock the APIHostnameValidator module
@@ -35,6 +35,7 @@ jest.mock('../../utils/paymentCards/PaymentCardBrandsManager', () => {
 
 // A helper to reset the global fetch mock between tests
 const originalFetch = global.fetch;
+const platformSdkIdentifier = 'rnSDK';
 afterEach(() => {
   jest.clearAllMocks();
   global.fetch = originalFetch;
@@ -122,6 +123,336 @@ describe('VGSCollect', () => {
         'Validation error'
       );
       expect((collect as any).cname).toBeUndefined();
+    });
+  });
+
+  describe('session', () => {
+    it('should derive lowercase UTF-8 hex file name for session config', () => {
+      const getCollectS3FileName = (
+        VGSCollect as any
+      ).getCollectS3FileName.bind(VGSCollect);
+
+      expect(getCollectS3FileName('my-form')).toBe('6d792d666f726d');
+      expect(getCollectS3FileName('Aß')).toBe('41c39f');
+    });
+
+    it('should build canonical session configuration URL', () => {
+      const buildSessionConfigUrl = (
+        VGSCollect as any
+      ).buildSessionConfigUrl.bind(VGSCollect);
+
+      expect(buildSessionConfigUrl('my-form', 'vault123')).toBe(
+        'https://js.verygoodvault.com/session-configuration/vault123/6d792d666f726d.json'
+      );
+    });
+
+    it('should fetch session configuration from canonical URL', async () => {
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          form_name: 'my-form',
+          version: '1.0',
+          config: {
+            cardAttributes: {
+              enable: true,
+              parameters: ['bin'],
+            },
+          },
+        }),
+      } as any);
+
+      await (VGSCollect as any).loadConfiguration('my-form', 'vault123');
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        'https://js.verygoodvault.com/session-configuration/vault123/6d792d666f726d.json',
+        expect.objectContaining({
+          method: 'GET',
+        })
+      );
+    });
+
+    it('should not attach a fake HTTP status when config fetch fails before response', async () => {
+      global.fetch = jest.fn().mockRejectedValue(new Error('Network error'));
+
+      try {
+        await (VGSCollect as any).loadConfiguration('my-form', 'vault123');
+        fail('Expected loadConfiguration to throw for network failure');
+      } catch (error) {
+        expect(error).toBeInstanceOf(Error);
+        expect(
+          (
+            error as Error & {
+              sessionConfigTelemetry?: {
+                configFile: string;
+                configFileStatusCode?: number;
+                configFileLatency: number;
+              };
+            }
+          ).sessionConfigTelemetry
+        ).toMatchObject({
+          configFile: '6d792d666f726d.json',
+          configFileStatusCode: undefined,
+        });
+      }
+    });
+
+    it('should throw InvalidFormConfiguration for invalid form name', async () => {
+      try {
+        await VGSCollect.session('invalid form!', tenantId, environment);
+        fail('Expected session to throw for invalid form name');
+      } catch (error) {
+        expect(error).toBeInstanceOf(VGSError);
+        expect((error as VGSError).code).toBe(
+          VGSErrorCode.InvalidFormConfiguration
+        );
+      }
+    });
+
+    it('should throw InvalidFormConfiguration for form name longer than 50 chars', async () => {
+      const longForm = 'a'.repeat(51);
+
+      try {
+        await VGSCollect.session(longForm, tenantId, environment);
+        fail('Expected session to throw for form name length > 50');
+      } catch (error) {
+        expect(error).toBeInstanceOf(VGSError);
+        expect((error as VGSError).code).toBe(
+          VGSErrorCode.InvalidFormConfiguration
+        );
+      }
+    });
+
+    it('should throw InvalidFormConfiguration for non-string runtime form input', async () => {
+      const loadConfigSpy = jest.spyOn(VGSCollect as any, 'loadConfiguration');
+
+      try {
+        // @ts-ignore: Simulate JS consumer passing an invalid runtime value.
+        await VGSCollect.session(123, tenantId, environment);
+        fail('Expected session to throw for non-string form input');
+      } catch (error) {
+        expect(error).toBeInstanceOf(VGSError);
+        expect((error as VGSError).code).toBe(
+          VGSErrorCode.InvalidFormConfiguration
+        );
+      }
+
+      expect(loadConfigSpy).not.toHaveBeenCalled();
+      loadConfigSpy.mockRestore();
+    });
+
+    it('should skip remote session config when form is undefined', async () => {
+      const loadConfigSpy = jest.spyOn(VGSCollect as any, 'loadConfiguration');
+
+      const collector = await VGSCollect.session(
+        undefined,
+        tenantId,
+        environment
+      );
+
+      expect(collector).toBeInstanceOf(VGSCollect);
+      expect(loadConfigSpy).not.toHaveBeenCalled();
+      expect((collector as any).includedCardAttributes).toEqual([]);
+
+      loadConfigSpy.mockRestore();
+    });
+
+    it('should skip remote session config when form is blank or whitespace', async () => {
+      const loadConfigSpy = jest.spyOn(VGSCollect as any, 'loadConfiguration');
+
+      const collector = await VGSCollect.session('   ', tenantId, environment);
+
+      expect(collector).toBeInstanceOf(VGSCollect);
+      expect(loadConfigSpy).not.toHaveBeenCalled();
+      expect((collector as any).includedCardAttributes).toEqual([]);
+
+      loadConfigSpy.mockRestore();
+    });
+
+    it('should omit CMP meta _formId when session form is empty', () => {
+      const collector = new VGSCollect(tenantId, environment);
+      const meta = (collector as any).buildCmpRequestMeta();
+
+      expect(meta).toEqual(
+        expect.objectContaining({
+          _source: 'vgs-collect',
+          _medium: platformSdkIdentifier,
+          _version: '1.2.0',
+        })
+      );
+      expect(meta).not.toHaveProperty('_formId');
+    });
+
+    it('should use plain session form value in CMP meta _formId', async () => {
+      const loadConfigSpy = jest
+        .spyOn(VGSCollect as any, 'loadConfiguration')
+        .mockResolvedValue({
+          payload: {
+            form_name: 'checkout-form',
+            version: '1.0',
+            config: {},
+          },
+          statusCode: 200,
+          latency: 10,
+        });
+
+      const collector = await VGSCollect.session(
+        'checkout-form',
+        tenantId,
+        environment
+      );
+      const meta = (collector as any).buildCmpRequestMeta();
+
+      expect(meta).toEqual(
+        expect.objectContaining({
+          _source: 'vgs-collect',
+          _medium: platformSdkIdentifier,
+          _formId: 'checkout-form',
+          _version: '1.2.0',
+        })
+      );
+
+      loadConfigSpy.mockRestore();
+    });
+
+    it('should initialize session for valid form name', async () => {
+      const loadConfigSpy = jest
+        .spyOn(VGSCollect as any, 'loadConfiguration')
+        .mockResolvedValue({
+          payload: {
+            form_name: 'checkout-form',
+            version: '1.0',
+            config: {},
+          },
+          statusCode: 200,
+          latency: 10,
+        });
+
+      const collector = await VGSCollect.session(
+        'checkout-form',
+        tenantId,
+        environment
+      );
+
+      expect(collector).toBeInstanceOf(VGSCollect);
+      expect(loadConfigSpy).toHaveBeenCalledWith('checkout-form', tenantId);
+
+      loadConfigSpy.mockRestore();
+    });
+
+    it('should map canonical cardAttributes config into includedCardAttributes when enabled', async () => {
+      const loadConfigSpy = jest
+        .spyOn(VGSCollect as any, 'loadConfiguration')
+        .mockResolvedValue({
+          payload: {
+            form_name: 'checkout-form',
+            version: '1.0',
+            config: {
+              cardAttributes: {
+                enable: true,
+                parameters: [' bin ', 'cardBrand', '', 'bin'],
+              },
+            },
+          },
+          statusCode: 200,
+          latency: 10,
+        });
+
+      const collector = await VGSCollect.session(
+        'checkout-form',
+        tenantId,
+        environment
+      );
+
+      expect((collector as any).includedCardAttributes).toEqual([
+        'bin',
+        'cardBrand',
+      ]);
+
+      loadConfigSpy.mockRestore();
+    });
+
+    it('should disable lookup config when canonical cardAttributes is disabled', async () => {
+      const loadConfigSpy = jest
+        .spyOn(VGSCollect as any, 'loadConfiguration')
+        .mockResolvedValue({
+          payload: {
+            form_name: 'checkout-form',
+            version: '1.0',
+            config: {
+              cardAttributes: {
+                enable: false,
+                parameters: ['bin'],
+              },
+            },
+          },
+          statusCode: 200,
+          latency: 10,
+        });
+
+      const collector = await VGSCollect.session(
+        'checkout-form',
+        tenantId,
+        environment
+      );
+
+      expect((collector as any).includedCardAttributes).toEqual([]);
+
+      loadConfigSpy.mockRestore();
+    });
+
+    it('should return a collector and report the error when configuration load fails', async () => {
+      const loadConfigSpy = jest
+        .spyOn(VGSCollect as any, 'loadConfiguration')
+        .mockRejectedValue(new Error('Network error'));
+      const onError = jest.fn();
+
+      const collector = await VGSCollect.session(
+        'checkout-form',
+        tenantId,
+        environment,
+        { onError }
+      );
+
+      expect(collector).toBeInstanceOf(VGSCollect);
+      expect(onError).toHaveBeenCalledWith(
+        expect.objectContaining({ message: 'Network error' })
+      );
+      expect((collector as any).includedCardAttributes).toEqual([]);
+      loadConfigSpy.mockRestore();
+    });
+
+    it('should apply inline fallback configuration on non-2xx config fetch', async () => {
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: false,
+        status: 404,
+        json: async () => ({ message: 'missing config' }),
+      } as any);
+      const onError = jest.fn();
+
+      const collector = await VGSCollect.session(
+        'checkout-form',
+        tenantId,
+        environment,
+        {
+          configuration: {
+            cardAttributes: {
+              enable: true,
+              parameters: ['bin'],
+            },
+          },
+          onError,
+        }
+      );
+
+      expect(collector).toBeInstanceOf(VGSCollect);
+      expect((collector as any).includedCardAttributes).toEqual(['bin']);
+      expect(onError).toHaveBeenCalledWith(
+        expect.objectContaining({
+          ok: false,
+          status: 404,
+        })
+      );
     });
   });
 

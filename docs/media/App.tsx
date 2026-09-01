@@ -19,6 +19,12 @@ export type RootStackParamList = {
 
 const Stack = createStackNavigator<RootStackParamList>();
 
+// Keep React Navigation on JS-based stack views to avoid native screen
+// host prop type mismatches in Fabric for this demo app.
+// TODO: Re-enable native screens after react-native-screens/Fabric prop
+// mismatch issue is fixed in the demo stack setup.
+enableScreens(false);
+
 export default function App() {
   return (
     <SafeAreaProvider>
@@ -27,6 +33,10 @@ export default function App() {
           initialRouteName="Home"
           // Workaround for RN/Navigation host type mismatch in this example app.
           detachInactiveScreens={false}
+          screenOptions={{
+            gestureEnabled: true,
+            headerShown: true,
+          }}
         >
           <Stack.Screen
             name="Home"

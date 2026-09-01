@@ -66,7 +66,7 @@ Recommended: install the skill with `skills.sh`. This is the easiest way to give
 The installed skill bundle includes `references/AGENTS.md`, and repository root `AGENTS.md` points to that same file, so a compatible skill-aware agent receives the durable integration policy automatically as part of the skill download without maintaining two copies.
 
 What the skill is useful for:
-- choosing the correct VGS Collect flow for the request, such as proxy submission, Vault tokenization, alias creation, or card creation
+- choosing the correct VGS Collect flow, such as proxy submission, tenant tokenization, alias creation, or card creation
 - asking a clarifying question when a card-entry request is ambiguous and the flow is not specified
 - steering non-card collection requests such as SSN or generic sensitive fields toward the correct field and tokenization APIs instead of card-specific ones
 - keeping generated guidance aligned with the installed package version when that version can be detected
@@ -90,14 +90,13 @@ Constraints:
 - Never persist raw field values; only use provided state booleans/metadata.
 Goals:
 1. Add a secure card form (card number, name, exp, cvc) with redacted logging (brand + last4 only when valid).
-2. Implement a flow that submits data to the sandbox vault and returns aliases.
+2. Implement a flow that submits data to the sandbox tenant and returns aliases.
 3. Provide Jest tests for valid/invalid card number and past expiration edge case.
 Return: Modified source files only. Do not commit secrets.
 ```
 
 ## Prerequisites
-You should have your organization registered at the <a href="https://dashboard.verygoodsecurity.com/dashboard/" target="_blank">VGS Dashboard</a>. A Sandbox vault is
-pre-created for you. Use the Dashboard to configure routes and begin collecting data. If you don’t have an organization yet, see the Quick Integration guides. Use your `<vaultId>` to start collecting data.
+Create an organization in the <a href="https://dashboard.verygoodsecurity.com/dashboard/" target="_blank">VGS Dashboard</a>. A sandbox tenant is created for you automatically. Configure its routes in the Dashboard, then use the tenant ID to start collecting data.
 
 ## Example app
 You can check our example application [here](./example/src/App.tsx). To run the example application, follow these steps:
@@ -120,7 +119,30 @@ import { VGSCollect, VGSTextInput } from '@vgs/collect-react-native';
 ```
 Initialize VGSCollect:
 ```javascript
-const collector = new VGSCollect('yourVaultId', 'sandbox'); // Use 'live' for production
+const collector = new VGSCollect('yourTenantId', 'sandbox'); // Use the live environment in production.
+```
+
+Initialize a session-backed collector:
+```javascript
+// Loads remote session config and enables form-driven card lookup when configured.
+const collector = await VGSCollect.session('checkout-form', 'yourTenantId', 'sandbox');
+
+// Remote configuration wins. If loading fails, the collector is still returned
+// with this optional inline fallback, and onError receives the load failure.
+const collectorWithFallback = await VGSCollect.session(
+  'checkout-form',
+  'yourTenantId',
+  'sandbox',
+  {
+    configuration: {
+      cardAttributes: { enable: true, parameters: ['issuer', 'card_type'] },
+    },
+    onError: () => showConfigurationWarning(),
+  }
+);
+
+// Skip remote session config by passing undefined, null, or blank form.
+const collectorWithoutConfig = await VGSCollect.session(undefined, 'yourTenantId', 'sandbox');
 ```
 Create Secure Input Fields:
 ```javascript
@@ -147,7 +169,7 @@ const handleSubmit = async () => {
         console.log('Success:', json);
       } catch (error) {
         console.warn(
-          'Error parsing response body. Body can be empty or your <vaultId> is wrong!',
+          'Could not parse the response body. It may be empty, or the tenant ID may be incorrect.',
           error
         );
       }
@@ -173,7 +195,69 @@ const handleSubmit = async () => {
   }
 };
 ```
-**NOTE**: Each input must set a `fieldName` that exactly matches the field key configured in your Vault Route settings. This identifier is required for redact/reveal operations on inbound/outbound routes.
+Each input must use a `fieldName` that matches the field key in the tenant route configuration. VGS uses this key for redact and reveal operations.
+
+### Card Attributes Lookup Response
+
+`setDidRetrieveCardAttributes` receives the complete parsed backend response object without unwrapping or reshaping it. This preserves backend-defined wrappers and nested attributes and matches the VGS Collect iOS callback contract.
+
+```javascript
+collector.setDidRetrieveCardAttributes((attributes) => {
+  const lookupData = attributes.data ?? attributes;
+  // Read backend-defined fields without assuming a flattened response.
+});
+```
+
+Use the raw lookup response callback when you also need the request status and native Fetch response. On success, its `data` property is typed as `VGSCardAttributes` and contains the same complete parsed backend payload delivered to `setDidRetrieveCardAttributes`.
+
+```javascript
+collector.setCardAttributesLookupResponse((lookupResponse) => {
+  if (lookupResponse.type === 'success') {
+    console.log('Lookup status:', lookupResponse.status);
+  } else {
+    console.warn('Lookup failed with status:', lookupResponse.status);
+  }
+});
+```
+
+### Create Card
+
+Use `createCard(extraData?)` with `setAuthHandler(...)`. Extra data is merged into `data.attributes`; collected secure fields take precedence. The SDK caches the token in memory and refreshes it once after a 401/403 response. CMP requires the canonical collected keys `pan`, `exp_month`, and `exp_year`; the convenience inputs and expiration serializer provide these defaults. CMP expiration uses `MM/YY`, with numeric request values such as `exp_month: 4` and `exp_year: 28`.
+
+The auth handler may return a raw token or a `Bearer <token>` value. Empty and prefix-only values such as `Bearer ` are rejected with `VGSErrorCode.IvalidAccessToken`.
+
+Replacing the auth handler prevents an earlier pending handler from repopulating the shared token cache. A 401/403 retry refreshes only the authorization token and reuses the original validated request payload, even if field values change while the token refresh is pending.
+
+Pass attributes directly, as shown below. For migration compatibility, the SDK also accepts the legacy `{ data: { attributes: ... } }` envelope without nesting it; SDK-collected secure fields and SDK request metadata still take precedence.
+
+```javascript
+collector.setAuthHandler(fetchJWTFromBackend);
+await collector.createCard({
+  cardholder: { address: { country: 'US' } },
+  token_type: 'pan',
+});
+```
+
+### Update Card
+
+Use `updateCard(cardId)` to PATCH an existing card. Registered `cvc` and `expDate` values are included when populated:
+
+```javascript
+await collector.updateCard('card_123');
+
+// Explicit tokens bypass the collector's token cache and automatic refresh.
+await collector.updateCardWithToken('card_123', accessToken);
+```
+
+Behavior:
+- `cvc` and `expDate` are optional; blank values are omitted.
+- When either secure field has a value, it must be valid.
+- At least one of `cvc`, `exp_month`, or `exp_year` must be present.
+- CMP expiration accepts `MM/YY`; `MM/YYYY` is rejected.
+- Only `cvc`, `exp_month`, and `exp_year` are accepted update attributes.
+- Only the first registered `cvc` and `expDate` fields are used for this request.
+- Auth-handler requests retry once with a fresh token after HTTP 401/403; explicit-token requests do not retry or cache the token.
+- Auth-handler retries reuse the original validated update payload rather than reading field values again.
 
 ## UI Inputs
 
