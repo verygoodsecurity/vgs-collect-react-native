@@ -221,6 +221,8 @@ export const VGSTextInputBase = forwardRef<VGSTextInputRef, VGSTextInputProps>((
     accessibilityLabel,
     accessibilityHint,
     accessibilityRole = 'text',
+    autoComplete,
+    importantForAutofill
   } = props;
 
   // Get defaults for the specified type
@@ -453,6 +455,8 @@ export const VGSTextInputBase = forwardRef<VGSTextInputRef, VGSTextInputProps>((
          accessibilityHint={accessibilityHint}
          accessibilityRole={accessibilityRole}
          accessibilityState={{ disabled: false, selected: state.isFocused, busy: state.validationErrors.length > 0 && state.isDirty }}
+        importantForAutofill={importantForAutofill}
+        autoComplete={autoComplete}
       />
     </View>
   );
