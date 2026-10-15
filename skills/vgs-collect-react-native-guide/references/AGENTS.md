@@ -110,7 +110,8 @@ Methods on `VGSCollect`:
 - `submit(path?: string, method?: string, extraData?: Record<string,any>, customRequestStructure?: Record<string,any>)`: Validates fields, constructs URL, merges extraData. Returns `{status, response}` where `response` is the Fetch Response object. Parse JSON cautiously (may be empty on some error codes).
 - `tokenize()`: Tokenizes fields configured with `tokenizationConfig`; returns `{ status, data }` where `data` is alias mapping.
 - `createAliases()`: Similar to `tokenize()` but uses newer Vault API version (`v2`). Keep alias ordering assumptions intact—never reorder collected data.
-- `createCard(extraData?: Record<string,any>)`: Uses `authHandler` to fetch a JWT, validates fields, and posts `{ data: { attributes, meta } }`. CMP requires canonical collected keys `pan`, `exp_month`, and `exp_year`; expiration is MM/YY and is sent as numeric month and two-digit year. Pass supported extra attributes directly; the legacy `{ data: { attributes } }` envelope remains accepted for migration compatibility. Secure collected values and SDK request metadata take precedence. The SDK caches the token and refreshes once on 401/403.
+- `createCard(extraData?: Record<string,any>, meta?: Record<string,string>)`: Uses `authHandler` to fetch a JWT, validates fields, and creates a card. Pass card attributes in `extraData` and custom string metadata in `meta`. Use MM/YY for expiration inputs.
+- `createCardWithToken(token, extraData?, meta?)` and `createCard(token, extraData?, meta?)`: Create a card with an explicit access token. Pass custom string metadata as the third argument.
 - `updateCard(cardId, extraData?: Record<string,any>)`: Uses `authHandler` to PATCH populated CVC and/or MM/YY expiration values. CMP accepts only `cvc`, `exp_month`, and `exp_year`; at least one must be present. It shares the token cache and one-refresh behavior.
 - `updateCardWithToken(cardId, token, extraData?)`: Explicit-token update variant with no token caching or automatic refresh.
 - `isFieldValueEqual(fieldName: string, value: string)`: Internal helper used by `MatchFieldRule` for secure cross-field comparison (no direct need to call in typical integrations).
@@ -222,11 +223,9 @@ collector.setAuthHandler(async () => {
 });
 await collector.createCard({ token_type: 'pan' });
 ```
-Pass extra attributes directly. Use the wrapped `{ data: { attributes } }` form only when preserving a legacy integration.
+Pass card attributes in `extraData` and custom string metadata in `meta`: `collector.createCard({ token_type: 'pan' }, { orderId: 'order-123' })`.
 
-SDK auth-handler requests cache tokens in memory and refresh once on 401/403 responses. This lifecycle is shared by lookup, create, and update operations.
-
-Replacing the auth handler prevents any token returned later by the previous handler from entering the shared cache. Create and update retries refresh only authorization and reuse the original validated request payload; they do not read secure field values again.
+Auth handlers can return a raw JWT or `Bearer <token>`. Empty tokens and `Bearer` without a token are invalid. Auth-handler requests refresh authorization and retry once after HTTP 401/403. Explicit-token calls do not refresh automatically.
 
 Custom Structure Wrapping:
 Use `customRequestStructure` placeholders to embed sensitive data inside nested JSON while keeping collection deterministic.

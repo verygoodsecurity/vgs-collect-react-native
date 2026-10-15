@@ -105,6 +105,12 @@ type SessionConfigurationLike =
 type CmpOperation = 'cardCreate' | 'cardUpdate';
 
 const CMP_REQUIRED_FIELDS_KEY = 'VGSSDKErrorInputDataRequired';
+const CMP_META_RESERVED_KEYS = new Set([
+  '_source',
+  '_medium',
+  '_version',
+  '_formId',
+]);
 const CMP_INVALID_FIELDS_KEY = 'VGSSDKErrorInputDataRequiredValid';
 const CMP_CREATE_REQUIRED_FIELDS = ['pan', 'exp_month', 'exp_year'] as const;
 const CMP_UPDATE_ALLOWED_FIELDS = new Set(['cvc', 'exp_month', 'exp_year']);
@@ -1013,54 +1019,97 @@ class VGSCollect {
     return wrappedData ? this.deepMerge(extraData, sdkPayload) : sdkPayload;
   }
 
+  private validateCreateCardMeta(
+    meta: unknown,
+    analyticsData: Record<string, any>
+  ): Record<string, string> {
+    try {
+      if (meta === null || typeof meta !== 'object') {
+        throw new Error();
+      }
+      const prototype = Object.getPrototypeOf(meta);
+      if (prototype !== Object.prototype && prototype !== null) {
+        throw new Error();
+      }
+      const customMeta: Record<string, string> = Object.create(null);
+      for (const key of Object.keys(meta)) {
+        if (CMP_META_RESERVED_KEYS.has(key)) {
+          continue;
+        }
+        const value = (meta as Record<string, unknown>)[key];
+        if (typeof value !== 'string') {
+          throw new Error();
+        }
+        customMeta[key] = value;
+      }
+      return customMeta;
+    } catch {
+      const error = this.makeCmpInputValidationError([], ['meta']);
+      this.trackBeforeSubmitFailure(error.code, analyticsData);
+      throw error;
+    }
+  }
+
   /**
-   * Creates a card via Card Management API with explicit JWT token.
-   * Prefer createCard() with authHandler when automatic token management is wanted.
+   * Create a card with a Card Management API access token.
    *
-   * @param token - JWT Access token (`Authorization: Bearer <token>`).
-   * @param extraData - Optional attributes, or a legacy `{ data: { attributes } }` envelope.
-   * @returns Promise resolving `{ status, response }` (native Fetch Response).
-   * @throws {VGSError} If access token invalid or inputs fail validation.
+   * @param token - Set the JWT access token for the Card Management API.
+   * @param extraData - Set additional card attributes.
+   * @param meta - Set custom string metadata for the card.
+   * @returns The method returns `{ status, response }`. The `response` value is a Fetch Response.
+   * @throws {VGSError} The method throws an error if the token, fields, or metadata are invalid.
+   * @throws {Error} The method throws an error if the request fails.
    */
   public async createCardWithToken(
     token: string,
-    extraData?: Record<string, any>
+    extraData?: Record<string, any>,
+    meta?: Record<string, string>
   ): Promise<{ status: number; response: any }> {
-    return this.performCreateCard(token, extraData ?? {});
+    return this.performCreateCard(token, extraData ?? {}, meta);
   }
 
   /**
-   * Creates a card via Card Management API. The object form uses authHandler;
-   * the legacy string form uses the supplied token without caching or refresh.
+   * Create a card with the Card Management API.
+   * To use an auth handler, set `authHandler`.
+   * To use an access token, set the `token` parameter.
    *
-   * @param extraData - Optional attributes, or a legacy `{ data: { attributes } }` envelope.
-   * @param token - Legacy explicit JWT token overload.
-   * @returns Promise resolving `{ status, response }` (native Fetch Response).
-   * @throws {VGSError} If authHandler not set, inputs fail validation, or request fails.
+   * @param extraData - Set additional card attributes.
+   * @param token - Set the JWT access token for the Card Management API.
+   * @param meta - Set custom string metadata for the card.
+   * @returns The method returns `{ status, response }`. The `response` value is a Fetch Response.
+   * @throws {VGSError} The method throws an error if authentication or input validation fails.
+   * @throws {Error} The method throws an error if the request fails.
    */
   public async createCard(
-    extraData?: Record<string, any>
+    extraData?: Record<string, any>,
+    meta?: Record<string, string>
   ): Promise<{ status: number; response: any }>;
   public async createCard(
     token: string,
-    extraData?: Record<string, any>
+    extraData?: Record<string, any>,
+    meta?: Record<string, string>
   ): Promise<{ status: number; response: any }>;
   public async createCard(
     tokenOrExtraData?: string | Record<string, any>,
-    extraData?: Record<string, any>
+    extraDataOrMeta?: Record<string, any>,
+    meta?: Record<string, string>
   ): Promise<{ status: number; response: any }> {
     if (typeof tokenOrExtraData === 'string') {
-      return this.createCardWithToken(tokenOrExtraData, extraData);
+      return this.createCardWithToken(tokenOrExtraData, extraDataOrMeta, meta);
     }
 
-    return this.createCardWithAuthHandler(tokenOrExtraData ?? {});
+    return this.createCardWithAuthHandler(
+      tokenOrExtraData ?? {},
+      extraDataOrMeta
+    );
   }
 
   /**
-   * Internal method to create card using authHandler with automatic token refresh on expiration.
+   * Create a card with a token from `authHandler`.
    */
   private async createCardWithAuthHandler(
-    extraData: Record<string, any>
+    extraData: Record<string, any>,
+    meta?: Record<string, string>
   ): Promise<{ status: number; response: any }> {
     const analyticsData = this.buildCmpAnalyticsData('cardCreate', extraData);
     const requestSnapshot: CmpRequestSnapshot = {};
@@ -1072,6 +1121,7 @@ class VGSCollect {
     const result = await this.performCreateCard(
       token,
       extraData,
+      meta,
       requestSnapshot
     );
 
@@ -1085,6 +1135,7 @@ class VGSCollect {
       return this.performCreateCard(
         refreshedToken,
         extraData,
+        meta,
         requestSnapshot
       );
     }
@@ -1093,11 +1144,12 @@ class VGSCollect {
   }
 
   /**
-   * Internal method to perform the actual card creation request.
+   * Send the card creation request.
    */
   private async performCreateCard(
     token: string,
     extraData: Record<string, any>,
+    meta?: Record<string, string>,
     requestSnapshot: CmpRequestSnapshot = {}
   ): Promise<{ status: number; response: any }> {
     const analyticsData = this.buildCmpAnalyticsData('cardCreate', extraData);
@@ -1115,6 +1167,13 @@ class VGSCollect {
         extraData,
         analyticsData
       );
+      if (meta !== undefined) {
+        const customMeta = this.validateCreateCardMeta(meta, analyticsData);
+        requestSnapshot.payload.data.meta = {
+          ...requestSnapshot.payload.data.meta,
+          ...customMeta,
+        };
+      }
     }
     const submitData = requestSnapshot.payload;
     const url = this.buildCmpAPIUrl(CardManagementAPIPath.Cards);

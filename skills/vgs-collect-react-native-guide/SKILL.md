@@ -79,7 +79,9 @@ Add or change supported functionality.
 - implement in the customer's app context, not a generic snippet
 - generate code with explicit validation and `VGSError` handling
 - use placeholders only for secrets, identifiers, endpoints, and env values the user has not supplied
-- for CMP flows, preserve the documented session fallback and shared auth-handler token lifecycle; do not cache tokens from handlers replaced while their request was pending; reuse the original validated request payload when refreshing authorization after 401/403; pass `createCard` extra attributes directly, accepting the wrapped `{ data: { attributes } }` form only for migration compatibility
+- for card creation, pass card attributes in `extraData` and custom string metadata in the separate `meta` argument
+- for CMP flows, configure a session and an auth handler; pass extra card attributes directly to `createCard`
+- accept a raw JWT or `Bearer <token>` from auth handlers; explain the single retry after HTTP 401/403 and no automatic refresh for explicit-token calls
 - for card attributes lookup, treat `setDidRetrieveCardAttributes` as the complete parsed backend response; preserve any `data` wrapper and backend-defined nested structure
 
 ### `migrate`
