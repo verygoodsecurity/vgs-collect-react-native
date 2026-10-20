@@ -27,12 +27,15 @@ jobs:
           private-key: ${{ secrets.VGS_GITHUB_CI_BOT_APP_PEM_FILE }}
           owner: verygoodsecurity
           repositories: skills-private
+          permission-contents: write
+          permission-pull-requests: write
 
       - name: Checkout the released VGS Collect React Native source
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
         with:
           ref: ${{ github.ref }}
           path: vgs-collect-react-native
+          persist-credentials: false
 
       - name: Checkout the private skills catalog
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
@@ -40,6 +43,7 @@ jobs:
           repository: verygoodsecurity/skills-private
           ref: main
           path: private-skills
+          persist-credentials: false
           token: ${{ steps.catalog-token.outputs.token }}
 
       - name: Replace the private skill with the released source bundle
@@ -73,61 +77,32 @@ jobs:
           skills-ref validate skills/vgs-collect-react-native-guide
           git diff --cached --check
 
-      - name: Push the refresh branch and create its pull request
+      - name: Prepare the refresh branch name
+        id: sync-branch
         shell: bash
-        working-directory: private-skills
         env:
-          GH_TOKEN: ${{ steps.catalog-token.outputs.token }}
           RELEASE_TAG: ${{ github.ref_name }}
-          RELEASE_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
-          if git diff --cached --quiet; then
-            echo 'The private skill already matches this release.'
-            exit 0
-          fi
-
           branch_hash="$(printf '%s' "$RELEASE_TAG" | sha256sum | cut -c1-12)"
-          branch="automation/sync-vgs-collect-react-native-guide-${branch_hash}"
-          git config user.name 'vgs-github-ci[bot]'
-          git config user.email 'vgs-github-ci[bot]@users.noreply.github.com'
-          git commit -m \
-            "docs: sync vgs-collect-react-native-guide for ${RELEASE_TAG}"
-          catalog_url="https://github.com/verygoodsecurity/skills-private.git"
-          auth_url="x-access-token:${GH_TOKEN}@${catalog_url#https://}"
-          git remote set-url origin "https://${auth_url}"
-          if git ls-remote --exit-code --heads origin "$branch" >/dev/null; then
-            remote_ref="refs/remotes/origin/${branch}"
-            git fetch origin "+refs/heads/${branch}:${remote_ref}"
-            git push --force-with-lease="refs/heads/${branch}:${remote_ref}" \
-              origin "HEAD:${branch}"
-          else
-            git push origin "HEAD:${branch}"
-          fi
+          echo "name=automation/sync-vgs-collect-react-native-guide-${branch_hash}" >> "$GITHUB_OUTPUT"
 
-          existing_pr="$(gh pr list \
-            --repo verygoodsecurity/skills-private \
-            --head "verygoodsecurity:${branch}" \
-            --state open \
-            --json url \
-            --jq '.[0].url')"
-          if [ -n "$existing_pr" ]; then
-            echo "Updated ${existing_pr}"
-            exit 0
-          fi
+      - name: Create or update the pull request with signed commits
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
+        with:
+          token: ${{ steps.catalog-token.outputs.token }}
+          path: private-skills
+          base: main
+          branch: ${{ steps.sync-branch.outputs.name }}
+          add-paths: skills/vgs-collect-react-native-guide
+          sign-commits: true
+          commit-message: >-
+            docs: sync vgs-collect-react-native-guide for ${{ github.ref_name }}
+          title: >-
+            docs: sync vgs-collect-react-native-guide for ${{ github.ref_name }}
+          body: |
+            Synchronizes `skills/vgs-collect-react-native-guide` from VGS Collect React Native ${{ github.ref_name }}.
 
-          release_url="https://github.com/${GITHUB_REPOSITORY}/tree/${RELEASE_SHA}"
-          sync_summary='Synchronizes `skills/vgs-collect-react-native-guide`'
-          sync_summary+=" from VGS Collect React Native ${RELEASE_TAG}."
-          validation='Validation: `skills-ref validate'
-          validation+=' skills/vgs-collect-react-native-guide` and'
-          validation+=' `git diff --check`.'
-          pr_body="$(printf '%s\n\n%s\n\n%s\n' \
-            "$sync_summary" "Source: ${release_url}" "$validation")"
-          gh pr create \
-            --repo verygoodsecurity/skills-private \
-            --base main \
-            --head "$branch" \
-            --title \
-              "docs: sync vgs-collect-react-native-guide for ${RELEASE_TAG}" \
-            --body "$pr_body"
+            Source: https://github.com/${{ github.repository }}/tree/${{ github.sha }}
+
+            Validation: `skills-ref validate skills/vgs-collect-react-native-guide` and `git diff --cached --check`.
