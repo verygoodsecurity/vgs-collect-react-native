@@ -39,8 +39,10 @@ type FieldUpdateCallback = (config: {
 interface TokenizationFieldMapping {
   /** The key to use in the final output (if a serializer split the value, this is the sub-key, e.g. "month") */
   key: string;
-  /** The registered field name (used to look up the field config) */
+  /** The registered field name. */
   fieldName: string;
+  /** The requested alias format at submission time. */
+  format?: VGSTokenizationConfiguration['format'];
 }
 
 interface FieldConfig {
@@ -105,6 +107,12 @@ type SessionConfigurationLike =
 type CmpOperation = 'cardCreate' | 'cardUpdate';
 
 const CMP_REQUIRED_FIELDS_KEY = 'VGSSDKErrorInputDataRequired';
+const CMP_META_RESERVED_KEYS = new Set([
+  '_source',
+  '_medium',
+  '_version',
+  '_formId',
+]);
 const CMP_INVALID_FIELDS_KEY = 'VGSSDKErrorInputDataRequiredValid';
 const CMP_CREATE_REQUIRED_FIELDS = ['pan', 'exp_month', 'exp_year'] as const;
 const CMP_UPDATE_ALLOWED_FIELDS = new Set(['cvc', 'exp_month', 'exp_year']);
@@ -543,6 +551,10 @@ class VGSCollect {
     }
   }
 
+  /**
+   * Creates aliases and returns non-tokenized submitted values with serializer output keys.
+   * Excludes non-tokenized card and CVC fields.
+   */
   public async createAliases(): Promise<{
     status: number;
     data: Record<string, string> | any;
@@ -1013,54 +1025,97 @@ class VGSCollect {
     return wrappedData ? this.deepMerge(extraData, sdkPayload) : sdkPayload;
   }
 
+  private validateCreateCardMeta(
+    meta: unknown,
+    analyticsData: Record<string, any>
+  ): Record<string, string> {
+    try {
+      if (meta === null || typeof meta !== 'object') {
+        throw new Error();
+      }
+      const prototype = Object.getPrototypeOf(meta);
+      if (prototype !== Object.prototype && prototype !== null) {
+        throw new Error();
+      }
+      const customMeta: Record<string, string> = Object.create(null);
+      for (const key of Object.keys(meta)) {
+        if (CMP_META_RESERVED_KEYS.has(key)) {
+          continue;
+        }
+        const value = (meta as Record<string, unknown>)[key];
+        if (typeof value !== 'string') {
+          throw new Error();
+        }
+        customMeta[key] = value;
+      }
+      return customMeta;
+    } catch {
+      const error = this.makeCmpInputValidationError([], ['meta']);
+      this.trackBeforeSubmitFailure(error.code, analyticsData);
+      throw error;
+    }
+  }
+
   /**
-   * Creates a card via Card Management API with explicit JWT token.
-   * Prefer createCard() with authHandler when automatic token management is wanted.
+   * Create a card with a Card Management API access token.
    *
-   * @param token - JWT Access token (`Authorization: Bearer <token>`).
-   * @param extraData - Optional attributes, or a legacy `{ data: { attributes } }` envelope.
-   * @returns Promise resolving `{ status, response }` (native Fetch Response).
-   * @throws {VGSError} If access token invalid or inputs fail validation.
+   * @param token - Set the JWT access token for the Card Management API.
+   * @param extraData - Set additional card attributes.
+   * @param meta - Set custom string metadata for the card.
+   * @returns The method returns `{ status, response }`. The `response` value is a Fetch Response.
+   * @throws {VGSError} The method throws an error if the token, fields, or metadata are invalid.
+   * @throws {Error} The method throws an error if the request fails.
    */
   public async createCardWithToken(
     token: string,
-    extraData?: Record<string, any>
+    extraData?: Record<string, any>,
+    meta?: Record<string, string>
   ): Promise<{ status: number; response: any }> {
-    return this.performCreateCard(token, extraData ?? {});
+    return this.performCreateCard(token, extraData ?? {}, meta);
   }
 
   /**
-   * Creates a card via Card Management API. The object form uses authHandler;
-   * the legacy string form uses the supplied token without caching or refresh.
+   * Create a card with the Card Management API.
+   * To use an auth handler, set `authHandler`.
+   * To use an access token, set the `token` parameter.
    *
-   * @param extraData - Optional attributes, or a legacy `{ data: { attributes } }` envelope.
-   * @param token - Legacy explicit JWT token overload.
-   * @returns Promise resolving `{ status, response }` (native Fetch Response).
-   * @throws {VGSError} If authHandler not set, inputs fail validation, or request fails.
+   * @param extraData - Set additional card attributes.
+   * @param token - Set the JWT access token for the Card Management API.
+   * @param meta - Set custom string metadata for the card.
+   * @returns The method returns `{ status, response }`. The `response` value is a Fetch Response.
+   * @throws {VGSError} The method throws an error if authentication or input validation fails.
+   * @throws {Error} The method throws an error if the request fails.
    */
   public async createCard(
-    extraData?: Record<string, any>
+    extraData?: Record<string, any>,
+    meta?: Record<string, string>
   ): Promise<{ status: number; response: any }>;
   public async createCard(
     token: string,
-    extraData?: Record<string, any>
+    extraData?: Record<string, any>,
+    meta?: Record<string, string>
   ): Promise<{ status: number; response: any }>;
   public async createCard(
     tokenOrExtraData?: string | Record<string, any>,
-    extraData?: Record<string, any>
+    extraDataOrMeta?: Record<string, any>,
+    meta?: Record<string, string>
   ): Promise<{ status: number; response: any }> {
     if (typeof tokenOrExtraData === 'string') {
-      return this.createCardWithToken(tokenOrExtraData, extraData);
+      return this.createCardWithToken(tokenOrExtraData, extraDataOrMeta, meta);
     }
 
-    return this.createCardWithAuthHandler(tokenOrExtraData ?? {});
+    return this.createCardWithAuthHandler(
+      tokenOrExtraData ?? {},
+      extraDataOrMeta
+    );
   }
 
   /**
-   * Internal method to create card using authHandler with automatic token refresh on expiration.
+   * Create a card with a token from `authHandler`.
    */
   private async createCardWithAuthHandler(
-    extraData: Record<string, any>
+    extraData: Record<string, any>,
+    meta?: Record<string, string>
   ): Promise<{ status: number; response: any }> {
     const analyticsData = this.buildCmpAnalyticsData('cardCreate', extraData);
     const requestSnapshot: CmpRequestSnapshot = {};
@@ -1072,6 +1127,7 @@ class VGSCollect {
     const result = await this.performCreateCard(
       token,
       extraData,
+      meta,
       requestSnapshot
     );
 
@@ -1085,6 +1141,7 @@ class VGSCollect {
       return this.performCreateCard(
         refreshedToken,
         extraData,
+        meta,
         requestSnapshot
       );
     }
@@ -1093,11 +1150,12 @@ class VGSCollect {
   }
 
   /**
-   * Internal method to perform the actual card creation request.
+   * Send the card creation request.
    */
   private async performCreateCard(
     token: string,
     extraData: Record<string, any>,
+    meta?: Record<string, string>,
     requestSnapshot: CmpRequestSnapshot = {}
   ): Promise<{ status: number; response: any }> {
     const analyticsData = this.buildCmpAnalyticsData('cardCreate', extraData);
@@ -1115,6 +1173,13 @@ class VGSCollect {
         extraData,
         analyticsData
       );
+      if (meta !== undefined) {
+        const customMeta = this.validateCreateCardMeta(meta, analyticsData);
+        requestSnapshot.payload.data.meta = {
+          ...requestSnapshot.payload.data.meta,
+          ...customMeta,
+        };
+      }
     }
     const submitData = requestSnapshot.payload;
     const url = this.buildCmpAPIUrl(CardManagementAPIPath.Cards);
@@ -1227,9 +1292,10 @@ class VGSCollect {
 
   /**
    * Tokenizes fields configured with `tokenizationConfig` using Vault API v1.
-   * Returns an alias map keyed by original field names (and serializer sub-keys).
+   * Returns aliases and non-tokenized submitted values with serializer output keys.
+   * Excludes non-tokenized card and CVC fields.
    *
-   * @returns Promise resolving `{ status, data }`, where `data` is alias mapping.
+   * @returns Promise resolving `{ status, data }` with aliases and non-tokenized values.
    */
   public async tokenize(): Promise<{
     status: number;
@@ -1250,15 +1316,14 @@ class VGSCollect {
     collectedDataFetcher: () => Promise<{
       collectedData: any[];
       fieldMappings: TokenizationFieldMapping[];
+      nonTokenizedData: Record<string, string>;
     }>
   ): Promise<{ status: number; data: Record<string, string> | any } | never> {
     const apiPath = getVaultAPIPath(apiVersion);
-    const { collectedData, fieldMappings } = await collectedDataFetcher();
-    const { url } = await this.prepareSubmission(
-      () => Promise.resolve({ data: collectedData }),
-      this.BASE_VAULT_URL,
-      apiPath
-    );
+    const { collectedData, fieldMappings, nonTokenizedData } =
+      await collectedDataFetcher();
+    await this.awaitCnameValidation();
+    const url = this.buildUrl(this.BASE_VAULT_URL, apiPath);
 
     if (collectedData.length === 0) {
       this.analyticsClient.trackFormEvent(
@@ -1272,7 +1337,7 @@ class VGSCollect {
         text: 'No data to tokenize!',
         severity: VGSLogSeverity.WARNING,
       });
-      return { status: 200, data: {} };
+      return { status: 200, data: { ...nonTokenizedData } };
     }
 
     const upstreamData =
@@ -1283,7 +1348,17 @@ class VGSCollect {
       {
         data: collectedData,
       },
-      { upstream: upstreamData }
+      { upstream: upstreamData },
+      {
+        logOverrides: {
+          headers: Object.fromEntries(
+            Object.keys(this.customHeaders).map((key) => [key, '[REDACTED]'])
+          ),
+          payload: {
+            data: collectedData.map((item) => ({ ...item, value: '[REDACTED]' })),
+          },
+        },
+      }
     );
 
     if (!response.ok) {
@@ -1294,7 +1369,7 @@ class VGSCollect {
     const responseJson = await response.json();
     const result = this.parseTokenizationResponse(responseJson, fieldMappings);
     this.logger.logTokenizationResponse(response, result);
-    return { status, data: result };
+    return { status, data: { ...nonTokenizedData, ...result } };
   }
 
   /**
@@ -1339,25 +1414,46 @@ class VGSCollect {
   }
 
   /**
-   *  Collects data from fields with tokenization config, handling asynchronous operations.
-   * @returns {Promise<Record<string, any>>} An object containing the field data.
+   * Validates and captures registered fields before asynchronous work.
+   * @returns A snapshot of field values and alias formats.
    */
   private async collectFieldTokenizationData(): Promise<{
     collectedData: Array<Record<string, any>>; // an array of field data objects
     fieldMappings: TokenizationFieldMapping[];
+    nonTokenizedData: Record<string, string>;
   }> {
     const collectedData: Array<Record<string, any>> = [];
     const fieldMappings: TokenizationFieldMapping[] = [];
+    const nonTokenizedData: Record<string, string> = Object.create(null);
+    const excludedFieldNames: string[] = [];
+    const fields = { ...this.fields };
+    this.validateFields(undefined, fields);
 
-    for (const fieldName in this.fields) {
-      const field = this.fields[fieldName];
-      if (!field || field.tokenizationConfig === undefined) continue;
+    for (const fieldName of Object.keys(fields)) {
+      const field = fields[fieldName];
+      if (!field) continue;
+
+      if (
+        field.tokenizationConfig === undefined &&
+        (field.type === 'card' || field.type === 'cvc')
+      ) {
+        excludedFieldNames.push(fieldName);
+        continue;
+      }
 
       const submitValue = field.getSubmitValue();
+      if (field.tokenizationConfig === undefined) {
+        if (typeof submitValue === 'object' && submitValue !== null) {
+          Object.assign(nonTokenizedData, submitValue);
+        } else if (submitValue !== undefined) {
+          nonTokenizedData[fieldName] = submitValue;
+        }
+        continue;
+      }
 
       if (typeof submitValue === 'object' && submitValue !== null) {
         // For fields with a serializer, iterate over its keys.
-        for (const key in submitValue) {
+        for (const key of Object.keys(submitValue)) {
           const config = field.tokenizationConfig;
           const fieldData = {
             value: submitValue[key],
@@ -1366,7 +1462,7 @@ class VGSCollect {
           };
           collectedData.push(fieldData);
           // Store a mapping that keeps track of the parent field and the specific sub-key.
-          fieldMappings.push({ key, fieldName });
+          fieldMappings.push({ key, fieldName, format: config.format });
         }
       } else {
         // For simple fields, use the field name as both.
@@ -1377,23 +1473,29 @@ class VGSCollect {
           format: config.format,
         };
         collectedData.push(fieldData);
-        fieldMappings.push({ key: fieldName, fieldName });
+        fieldMappings.push({ key: fieldName, fieldName, format: config.format });
       }
     }
-    return { collectedData, fieldMappings };
+    // Exclude protected field names from other fields' serializer output.
+    for (const fieldName of excludedFieldNames) {
+      delete nonTokenizedData[fieldName];
+    }
+    // Reserve alias keys even when the response does not contain an alias.
+    for (const { key } of fieldMappings) {
+      delete nonTokenizedData[key];
+    }
+    return { collectedData, fieldMappings, nonTokenizedData };
   }
 
   private parseTokenizationResponse(
     responseJson: any,
     fieldMappings: TokenizationFieldMapping[]
   ): Record<string, string> {
-    const tokenizedData: Record<string, string> = {};
+    const tokenizedData: Record<string, string> = Object.create(null);
     responseJson.data.forEach((item: any, index: number) => {
       const mapping = fieldMappings[index];
       if (mapping) {
-        // Get the tokenization config from the registered field
-        const config = this.fields[mapping.fieldName]?.tokenizationConfig;
-        const requestedFormat = config?.format;
+        const requestedFormat = mapping.format;
         // Find the alias for the requested format
         const alias = item.aliases.find(
           (a: any) => a.format === requestedFormat
@@ -1411,10 +1513,13 @@ class VGSCollect {
    * Validates all registered fields via `getValidationErrors()`.
    * Throws `VGSError` with `VGSErrorCode.InputDataIsNotValid` when any field has errors.
    */
-  private validateFields(analyticsData?: Record<string, any>) {
+  private validateFields(
+    analyticsData?: Record<string, any>,
+    fields: Record<string, FieldConfig> = this.fields
+  ) {
     const errors: Record<string, string[]> = {};
-    for (const fieldName in this.fields) {
-      const field = this.fields[fieldName];
+    for (const fieldName of Object.keys(fields)) {
+      const field = fields[fieldName];
       if (!field) continue;
 
       const validationErrors = field.getValidationErrors();

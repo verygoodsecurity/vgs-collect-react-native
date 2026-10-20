@@ -184,7 +184,10 @@ const CreateCard = () => {
     }
     try {
       // Use authHandler for JWT token (automatically managed by SDK)
-      const { status, response } = await collector.createCard();
+      const { status, response } = await collector.createCard(undefined, {
+        orderId: 'demo-order-123',
+        integration: 'react-native-demo',
+      });
       if (response.ok) {
         try {
           const responseBody = await response.json();

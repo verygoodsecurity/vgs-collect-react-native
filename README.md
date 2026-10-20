@@ -153,6 +153,7 @@ Create Secure Input Fields:
   fieldName="card_holder"
   type="cardHolderName"
   placeholder="Name"
+  autoCapitalize="words"
   onStateChange={handleFieldStateChange}
 />
 ```
@@ -196,6 +197,7 @@ const handleSubmit = async () => {
 };
 ```
 Each input must use a `fieldName` that matches the field key in the tenant route configuration. VGS uses this key for redact and reveal operations.
+For `tokenize()` and `createAliases()`, configure the `tokenization` prop on card and CVC inputs to receive aliases. Non-tokenized card and CVC values are omitted.
 
 ### Card Attributes Lookup Response
 
@@ -222,21 +224,30 @@ collector.setCardAttributesLookupResponse((lookupResponse) => {
 
 ### Create Card
 
-Use `createCard(extraData?)` with `setAuthHandler(...)`. Extra data is merged into `data.attributes`; collected secure fields take precedence. The SDK caches the token in memory and refreshes it once after a 401/403 response. CMP requires the canonical collected keys `pan`, `exp_month`, and `exp_year`; the convenience inputs and expiration serializer provide these defaults. CMP expiration uses `MM/YY`, with numeric request values such as `exp_month: 4` and `exp_year: 28`.
+Use `createCard(extraData?, meta?)` with `setAuthHandler(...)`. Pass card attributes in `extraData`. Pass custom metadata, such as an order ID, in `meta`. Metadata values must be strings.
 
-The auth handler may return a raw token or a `Bearer <token>` value. Empty and prefix-only values such as `Bearer ` are rejected with `VGSErrorCode.IvalidAccessToken`.
+The auth handler can return a raw JWT or `Bearer <token>`. Empty tokens and `Bearer` without a token are invalid. After HTTP 401/403, the SDK requests a fresh token and retries once. Explicit-token calls do not refresh automatically.
 
-Replacing the auth handler prevents an earlier pending handler from repopulating the shared token cache. A 401/403 retry refreshes only the authorization token and reuses the original validated request payload, even if field values change while the token refresh is pending.
-
-Pass attributes directly, as shown below. For migration compatibility, the SDK also accepts the legacy `{ data: { attributes: ... } }` envelope without nesting it; SDK-collected secure fields and SDK request metadata still take precedence.
+CMP requires the collected keys `pan`, `exp_month`, and `exp_year`. Use `MM/YY` for expiration inputs.
 
 ```javascript
 collector.setAuthHandler(fetchJWTFromBackend);
-await collector.createCard({
-  cardholder: { address: { country: 'US' } },
-  token_type: 'pan',
-});
+await collector.createCard(
+  {
+    cardholder: { address: { country: 'US' } },
+    token_type: 'pan',
+  },
+  { orderId: 'order-123', integration: 'checkout' }
+);
+
+// Create a card with metadata and no extra attributes.
+await collector.createCard(undefined, { orderId: 'order-123' });
+
+// Create a card with an explicit access token.
+await collector.createCardWithToken(accessToken, undefined, { orderId: 'order-123' });
 ```
+
+Custom metadata is sent in `data.meta`. Card attributes are sent in `data.attributes`.
 
 ### Update Card
 

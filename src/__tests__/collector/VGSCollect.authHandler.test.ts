@@ -514,7 +514,7 @@ describe('VGSCollect - Auth Handler & JWT Token Management', () => {
             caller: 'preserved',
             _source: 'vgs-collect',
             _medium: platformSdkIdentifier,
-            _version: '1.2.1',
+            _version: '1.2.2',
           },
         },
       });
@@ -554,7 +554,7 @@ describe('VGSCollect - Auth Handler & JWT Token Management', () => {
           meta: expect.objectContaining({
             _source: 'vgs-collect',
             _medium: platformSdkIdentifier,
-            _version: '1.2.1',
+            _version: '1.2.2',
           }),
         },
       });
@@ -749,7 +749,7 @@ describe('VGSCollect - Auth Handler & JWT Token Management', () => {
         source: 'mobile',
         _source: 'vgs-collect',
         _medium: platformSdkIdentifier,
-        _version: '1.2.1',
+        _version: '1.2.2',
       });
     });
 
@@ -985,6 +985,332 @@ describe('VGSCollect - Auth Handler & JWT Token Management', () => {
 
       expect((collector as any).cachedJwtToken).toBeUndefined();
     });
+  });
+
+  describe('createCard custom metadata', () => {
+    const prepareCollector = (
+      collector = new VGSCollect(tenantId, environment)
+    ) => {
+      collector.setAuthHandler(jest.fn().mockResolvedValue('test-token'));
+      jest
+        .spyOn(collector as any, 'collectFieldData')
+        .mockResolvedValue(validCreateCardFields);
+      return collector;
+    };
+    const captureSubmit = (collector: VGSCollect): jest.SpyInstance =>
+      jest.spyOn(collector as any, 'submitDataToServer').mockResolvedValue({
+        status: 201,
+        response: { ok: true },
+      });
+
+    beforeEach(() => {
+      jest
+        .spyOn(VGSAnalyticsClient.getInstance(), 'trackFormEvent')
+        .mockImplementation(() => {});
+    });
+    afterEach(() => jest.restoreAllMocks());
+
+    it.each(['authHandler', 'legacyToken', 'explicitToken'])(
+      'routes separate metadata through the %s call family',
+      async (family) => {
+        const collector = prepareCollector();
+        const submit = captureSubmit(collector);
+        const extraData = { token_type: 'pan', meta: 'legacy-attribute' };
+        const meta = { orderId: 'order-123', empty: '', spacing: '  value  ' };
+        const result =
+          family === 'authHandler'
+            ? await collector.createCard(extraData, meta)
+            : family === 'legacyToken'
+              ? await collector.createCard('token', extraData, meta)
+              : await collector.createCardWithToken('token', extraData, meta);
+        expect(result).toEqual({ status: 201, response: { ok: true } });
+        const body = submit.mock.calls[0]![2];
+        expect(body.data.attributes).toEqual({
+          pan: validCreateCardFields.pan,
+          exp_month: 4,
+          exp_year: 28,
+          ...extraData,
+        });
+        expect(body.data.meta).toEqual({
+          ...meta,
+          _source: 'vgs-collect',
+          _medium: 'rnSDK',
+          _version: '1.2.2',
+        });
+        expect(submit.mock.calls[0]![3].content).toEqual([
+          'textField',
+          'custom_data',
+        ]);
+        expect(extraData).toEqual({
+          token_type: 'pan',
+          meta: 'legacy-attribute',
+        });
+        expect(meta).toEqual({
+          orderId: 'order-123',
+          empty: '',
+          spacing: '  value  ',
+        });
+      }
+    );
+
+    it.each([
+      {},
+      { token_type: 'pan', meta: 'attribute' },
+      { data: { meta: { orderId: 7, _formId: 'legacy-form' } } },
+      {
+        data: {
+          attributes: { token_type: 'pan' },
+          meta: { object: { flag: true }, _formId: 'legacy-form' },
+        },
+      },
+    ])(
+      'preserves the complete existing body with undefined or empty metadata: %j',
+      async (extraData) => {
+        const collector = prepareCollector();
+        const submit = captureSubmit(collector);
+        await collector.createCard(extraData);
+        await collector.createCard(extraData, undefined);
+        await collector.createCard(extraData, {});
+        expect(submit.mock.calls[1]![2]).toEqual(submit.mock.calls[0]![2]);
+        expect(submit.mock.calls[2]![2]).toEqual(submit.mock.calls[0]![2]);
+        expect(submit.mock.calls[1]![4].logOverrides).toEqual(
+          submit.mock.calls[0]![4].logOverrides
+        );
+        expect(submit.mock.calls[2]![4].logOverrides).toEqual(
+          submit.mock.calls[0]![4].logOverrides
+        );
+      }
+    );
+
+    it('overlays only new custom strings while preserving arbitrary legacy values and formId', async () => {
+      const collector = prepareCollector();
+      const submit = captureSubmit(collector);
+      const extraData = {
+        data: {
+          attributes: {},
+          meta: {
+            orderId: 7,
+            legacyObject: { flag: true },
+            _formId: 'legacy-form',
+            _source: 'spoofed',
+          },
+        },
+      };
+      await collector.createCard(extraData, {
+        orderId: 'new-order',
+        integration: 'checkout',
+        _formId: 'new-form',
+      });
+      expect(submit.mock.calls[0]![2].data.meta).toEqual({
+        orderId: 'new-order',
+        integration: 'checkout',
+        legacyObject: { flag: true },
+        _formId: 'legacy-form',
+        _source: 'vgs-collect',
+        _medium: 'rnSDK',
+        _version: '1.2.2',
+      });
+      expect(extraData.data.meta.orderId).toBe(7);
+    });
+
+    it.each(['_source', '_medium', '_version', '_formId'])(
+      'does not read or validate new reserved %s values',
+      async (key) => {
+        const collector = prepareCollector();
+        const submit = captureSubmit(collector);
+        const getter = jest.fn(() => {
+          throw new Error('must not read reserved value');
+        });
+        const meta = Object.defineProperty({ orderId: 'order-123' }, key, {
+          enumerable: true,
+          get: getter,
+        });
+        await collector.createCard(undefined, meta);
+        expect(getter).not.toHaveBeenCalled();
+        expect(submit.mock.calls[0]![2].data.meta.orderId).toBe('order-123');
+        expect(submit.mock.calls[0]![2].data.meta._formId).toBeUndefined();
+      }
+    );
+
+    it('ignores non-string reserved values and copies only own enumerable string entries safely', async () => {
+      const collector = prepareCollector();
+      const submit = captureSubmit(collector);
+      const meta = Object.assign(Object.create(null), {
+        _source: 7,
+        _medium: null,
+        _version: {},
+        _formId: false,
+        __type: 'custom-type',
+        __proto__: 'unused-literal',
+      });
+      Object.defineProperty(meta, '__proto__', {
+        value: 'custom-proto',
+        enumerable: true,
+      });
+      Object.defineProperty(meta, 'hidden', {
+        value: 'hidden',
+        enumerable: false,
+      });
+      meta[Symbol('symbol')] = 'symbol-value';
+      await collector.createCard(undefined, meta);
+      const body = submit.mock.calls[0]![2];
+      const serialized = JSON.parse(JSON.stringify(body));
+      expect(serialized.data.meta.__type).toBe('custom-type');
+      expect(serialized.data.meta.__proto__).toBe('custom-proto');
+      expect(Object.hasOwn(body.data.meta, '__proto__')).toBe(true);
+      expect(Object.getPrototypeOf(body.data.meta)).toBe(Object.prototype);
+      expect(Object.getPrototypeOf(meta)).toBeNull();
+      expect(body.data.meta.hidden).toBeUndefined();
+      expect(Object.getOwnPropertySymbols(body.data.meta)).toEqual([]);
+      expect(body.data.meta._source).toBe('vgs-collect');
+      expect(body.data.meta._formId).toBeUndefined();
+    });
+
+    it('preserves session form identity and supports metadata-only creation', async () => {
+      jest.spyOn(VGSCollect as any, 'loadConfiguration').mockResolvedValue({
+        payload: { form_name: 'checkout-form', config: {} },
+        statusCode: 200,
+        latency: 1,
+      });
+      const collector = prepareCollector(
+        await VGSCollect.session('checkout-form', tenantId, environment)
+      );
+      const submit = captureSubmit(collector);
+      await collector.createCard(undefined, {
+        orderId: 'order-123',
+        _formId: 'spoofed',
+      });
+      expect(submit.mock.calls[0]![2].data.meta).toMatchObject({
+        orderId: 'order-123',
+        _formId: 'checkout-form',
+      });
+      expect(submit.mock.calls[0]![3].content).toEqual(['textField']);
+    });
+
+    it.each([
+      null,
+      [],
+      'text',
+      7,
+      true,
+      new Date(),
+      new (class Meta {})(),
+      { orderId: 7 },
+      { orderId: false },
+      { orderId: null },
+      { orderId: [] },
+      { orderId: {} },
+      { orderId: Object('boxed') },
+    ])(
+      'rejects invalid new metadata categorically before CMP submission: %j',
+      async (meta) => {
+        const collector = prepareCollector();
+        const submit = captureSubmit(collector);
+        await expect(
+          collector.createCard(undefined, meta as any)
+        ).rejects.toMatchObject({
+          code: VGSErrorCode.InputDataIsNotValid,
+          message: 'VGSCollect: Input data not valid!',
+          details: { VGSSDKErrorInputDataRequiredValid: ['meta'] },
+        });
+        expect(submit).not.toHaveBeenCalled();
+      }
+    );
+
+    it('preserves secure field validation with new metadata', async () => {
+      const collector = prepareCollector();
+      const submit = captureSubmit(collector);
+      collector.registerField(
+        'pan',
+        () => '',
+        () => ['required']
+      );
+      await expect(
+        collector.createCard(undefined, { orderId: 'order-123' })
+      ).rejects.toMatchObject({
+        code: VGSErrorCode.InputDataIsNotValid,
+        details: { pan: ['required'] },
+      });
+      expect(submit).not.toHaveBeenCalled();
+    });
+
+    it.each([false, true])(
+      'preserves custom metadata in request/error logs without adding it to analytics (failure=%s)',
+      async (failure) => {
+        const collector = prepareCollector();
+        const logger = (collector as any).logger;
+        const logRequest = jest
+          .spyOn(logger, 'logRequest')
+          .mockImplementation(() => {});
+        const logError = jest
+          .spyOn(logger, 'logRequestError')
+          .mockImplementation(() => {});
+        const fetch = jest.fn();
+        global.fetch = fetch;
+        const error = new Error('Network unavailable');
+        if (failure) fetch.mockRejectedValue(error);
+        else fetch.mockResolvedValue({ status: 201, ok: true });
+        const meta = JSON.parse(
+          '{"orderId":"synthetic-order","__proto__":"custom-proto"}'
+        );
+        const request = collector.createCard(undefined, meta);
+        if (failure) await expect(request).rejects.toBe(error);
+        else await expect(request).resolves.toMatchObject({ status: 201 });
+        expect(
+          JSON.parse(fetch.mock.calls[0]![1].body).data.meta
+        ).toMatchObject(meta);
+        const loggedMeta = (logRequest.mock.calls[0]![2] as any).data.meta;
+        expect(loggedMeta.orderId).toBe('synthetic-order');
+        expect(loggedMeta.__proto__).toBe('custom-proto');
+        expect(Object.getPrototypeOf(loggedMeta)).toBe(Object.prototype);
+        if (failure)
+          expect(logError.mock.calls[0]![3]).toEqual(
+            logRequest.mock.calls[0]![2]
+          );
+        const events = (
+          VGSAnalyticsClient.getInstance().trackFormEvent as jest.Mock
+        ).mock.calls;
+        expect(JSON.stringify(events)).not.toContain('synthetic-order');
+        expect(JSON.stringify(events)).not.toContain('custom-proto');
+        const cmpEvents = events.filter(
+          (event) => event[3]?.upstream === 'cmp'
+        );
+        expect(cmpEvents).toHaveLength(2);
+        for (const event of cmpEvents) {
+          expect(event[3].content).toEqual(['textField']);
+          expect(event[3].operation).toBe('cardCreate');
+        }
+      }
+    );
+
+    it.each([401, 403])(
+      'snapshots accepted metadata through a %s refresh',
+      async (status) => {
+        const collector = prepareCollector();
+        const handler = jest
+          .fn()
+          .mockResolvedValueOnce('first-token')
+          .mockResolvedValueOnce('new-token');
+        collector.setAuthHandler(handler);
+        const meta: Record<string, string> = { orderId: 'original-order' };
+        const submit = captureSubmit(collector);
+        submit.mockImplementationOnce(async () => {
+          delete meta.orderId;
+          meta.changed = 'new-value';
+          return { status, response: { ok: false } };
+        });
+        await collector.createCard(undefined, meta);
+        expect(handler).toHaveBeenCalledTimes(2);
+        expect(submit.mock.calls[1]![2]).toBe(submit.mock.calls[0]![2]);
+        expect(submit.mock.calls[1]![2].data.meta.orderId).toBe(
+          'original-order'
+        );
+        expect(submit.mock.calls[1]![2].data.meta.changed).toBeUndefined();
+        expect(
+          submit.mock.calls[1]![4].logOverrides.payload.data.meta.orderId
+        ).toBe('original-order');
+      }
+    );
   });
 
   describe('updateCard()', () => {

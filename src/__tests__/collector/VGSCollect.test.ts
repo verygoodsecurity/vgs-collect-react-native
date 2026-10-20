@@ -285,7 +285,7 @@ describe('VGSCollect', () => {
         expect.objectContaining({
           _source: 'vgs-collect',
           _medium: platformSdkIdentifier,
-          _version: '1.2.1',
+          _version: '1.2.2',
         })
       );
       expect(meta).not.toHaveProperty('_formId');
@@ -316,7 +316,7 @@ describe('VGSCollect', () => {
           _source: 'vgs-collect',
           _medium: platformSdkIdentifier,
           _formId: 'checkout-form',
-          _version: '1.2.1',
+          _version: '1.2.2',
         })
       );
 
@@ -851,7 +851,9 @@ describe('VGSCollect', () => {
       collect = new VGSCollect(tenantId, environment);
       // mocked data
       (collect as any).collectFieldTokenizationData = jest.fn();
-      (collect as any).prepareSubmission = jest.fn();
+      (collect as any).awaitCnameValidation = jest
+        .fn()
+        .mockResolvedValue(undefined);
       (collect as any).submitDataToServer = jest.fn();
       (collect as any).parseTokenizationResponse = jest.fn();
       (collect as any).BASE_TOKENIZATION_URL = 'vault-api.verygoodvault.com';
@@ -859,13 +861,10 @@ describe('VGSCollect', () => {
 
     it('should return empty data when collectedData is empty', async () => {
       (collect as any).collectFieldTokenizationData.mockResolvedValue({
+        nonTokenizedData: {},
         collectedData: [],
         fieldMappings: [],
       });
-
-      (collect as any).prepareSubmission.mockResolvedValue({
-        url: 'mocked_url',
-      }); // Mock prepareSubmission
 
       (collect as any).submitDataToServer.mockResolvedValue({
         // Mock submitDataToServer for success
@@ -879,11 +878,9 @@ describe('VGSCollect', () => {
 
     it('should return processed data on successful tokenization', async () => {
       (collect as any).collectFieldTokenizationData.mockResolvedValue({
+        nonTokenizedData: {},
         collectedData: [{ field: 'value' }],
         fieldMappings: [{ key: 'field', fieldName: 'field' }], // fieldMappings should be an array
-      });
-      (collect as any).prepareSubmission.mockResolvedValue({
-        url: `https://${tenantId}.${environment}.${(collect as any).BASE_TOKENIZATION_URL}/aliases`,
       });
       (collect as any).submitDataToServer.mockResolvedValue({
         status: 200,
@@ -916,11 +913,9 @@ describe('VGSCollect', () => {
 
     it('should return original response on failed tokenization', async () => {
       (collect as any).collectFieldTokenizationData.mockResolvedValue({
+        nonTokenizedData: {},
         collectedData: [{ field: 'value' }],
         fieldMappings: [{ key: 'field', fieldName: 'field' }],
-      });
-      (collect as any).prepareSubmission.mockResolvedValue({
-        url: `https://${tenantId}.${environment}.${(collect as any).BASE_TOKENIZATION_URL}/aliases`,
       });
       (collect as any).submitDataToServer.mockResolvedValue({
         status: 400,
@@ -944,11 +939,9 @@ describe('VGSCollect', () => {
 
     it('should handle errors during tokenization', async () => {
       (collect as any).collectFieldTokenizationData.mockResolvedValue({
+        nonTokenizedData: {},
         collectedData: [{ field: 'value' }],
         fieldMappings: [{ key: 'field', fieldName: 'field' }], // fieldMappings should be an array
-      });
-      (collect as any).prepareSubmission.mockResolvedValue({
-        url: `https://${tenantId}.${environment}.${(collect as any).BASE_TOKENIZATION_URL}/aliases`,
       });
       (collect as any).submitDataToServer.mockRejectedValue(
         new Error('Network error')
@@ -965,11 +958,9 @@ describe('VGSCollect', () => {
 
     it('should handle empty response data', async () => {
       (collect as any).collectFieldTokenizationData.mockResolvedValue({
+        nonTokenizedData: {},
         collectedData: [{ field: 'value' }],
         fieldMappings: [{ key: 'field', fieldName: 'field' }],
-      });
-      (collect as any).prepareSubmission.mockResolvedValue({
-        url: `https://${tenantId}.${environment}.${(collect as any).BASE_TOKENIZATION_URL}/aliases`,
       });
       (collect as any).submitDataToServer.mockResolvedValue({
         status: 200,
@@ -986,11 +977,9 @@ describe('VGSCollect', () => {
 
     it('should handle missing aliases in response', async () => {
       (collect as any).collectFieldTokenizationData.mockResolvedValue({
+        nonTokenizedData: {},
         collectedData: [{ field: 'value' }],
         fieldMappings: [{ key: 'field', fieldName: 'field' }],
-      });
-      (collect as any).prepareSubmission.mockResolvedValue({
-        url: `https://${tenantId}.${environment}.${(collect as any).BASE_TOKENIZATION_URL}/aliases`,
       });
       (collect as any).submitDataToServer.mockResolvedValue({
         status: 200,
@@ -1007,11 +996,9 @@ describe('VGSCollect', () => {
 
     it('should handle missing format in aliases', async () => {
       (collect as any).collectFieldTokenizationData.mockResolvedValue({
+        nonTokenizedData: {},
         collectedData: [{ field: 'value' }],
         fieldMappings: [{ key: 'field', fieldName: 'field' }],
-      });
-      (collect as any).prepareSubmission.mockResolvedValue({
-        url: `https://${tenantId}.${environment}.${(collect as any).BASE_TOKENIZATION_URL}/aliases`,
       });
       (collect as any).submitDataToServer.mockResolvedValue({
         status: 200,
@@ -1042,13 +1029,14 @@ describe('VGSCollect', () => {
       }
     });
 
-    it('should handle errors in prepareSubmission', async () => {
+    it('should handle CNAME validation errors', async () => {
       (collect as any).collectFieldTokenizationData.mockResolvedValue({
+        nonTokenizedData: {},
         collectedData: [{ field: 'value' }],
         fieldMappings: [{ key: 'field', fieldName: 'field' }],
       });
-      (collect as any).prepareSubmission.mockRejectedValue(
-        new Error('Prepare error')
+      (collect as any).awaitCnameValidation.mockRejectedValue(
+        new Error('CNAME validation error')
       );
 
       try {
@@ -1056,7 +1044,7 @@ describe('VGSCollect', () => {
         fail('Tokenize should have thrown an error');
       } catch (error: any) {
         expect(error).toBeInstanceOf(Error);
-        expect(error.message).toEqual('Prepare error');
+        expect(error.message).toEqual('CNAME validation error');
       }
     });
   });

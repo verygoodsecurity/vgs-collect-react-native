@@ -20,6 +20,7 @@ import {
   VGSErrorCode,
   VGSCollectLogger,
   VGSTokenizationConfiguration,
+  ExpDateSeparateSerializer,
 } from '@vgs/collect-react-native';
 import type { VGSTextInputState } from '@vgs/collect-react-native';
 
@@ -31,7 +32,7 @@ if (process.env.NODE_ENV !== 'production') {
 // Set your tenant ID and environment.
 const collector = new VGSCollect('tenantId', 'sandbox');
 // Tokenization API JWT token https://www.verygoodsecurity.com/docs/api/vault/#description/authentication-and-authorization
-const token = '<your_token_here>'
+const token = '<your_token_here>';
 
 const TokenizeData = () => {
   const [formFieldsState, setFormFieldsState] = useState<{
@@ -84,11 +85,11 @@ const TokenizeData = () => {
     collector.setCustomHeaders({ Authorization: 'Bearer '+ token });
 
     try {
-      const { status, data } = await collector.createAliases();
+      const { status } = await collector.createAliases();
       if (status >= 200 && status < 300) {
         try {
           setLabelStatus('- SUCCESS!- ');
-          console.log('Success:', data);
+          console.log('Tokenization succeeded:', status);
         } catch (error) {
           setLabelStatus('- FAILED! -');
           console.warn(
@@ -98,7 +99,7 @@ const TokenizeData = () => {
         }
       } else {
         setLabelStatus('FAILED!');
-        console.warn(`Server responded with error: ${status}\n${data}`);
+        console.warn(`Server responded with error: ${status}`);
         if (status === 400) {
           console.error('Bad request! Check your VGSCollect config and input.');
         } else if (status === 500) {
@@ -135,7 +136,8 @@ const TokenizeData = () => {
           fieldName="card_holder"
           type="cardHolderName"
           placeholder="Card Holder Name"
-          tokenization={VGSTokenizationConfiguration.presets.cardHolderName}
+          autoCapitalize="words"
+          tokenization={false}
           onStateChange={(state: any) =>
             handleFieldStateChange('card_holder', state)
           }
@@ -191,7 +193,8 @@ const TokenizeData = () => {
             fieldName="expiration_date"
             type="expDate"
             placeholder="MM/YY"
-            tokenization={VGSTokenizationConfiguration.presets.expDate}
+            serializers={[new ExpDateSeparateSerializer('exp_month', 'exp_year')]}
+            tokenization={false}
             onStateChange={(state) =>
               handleFieldStateChange('expiration_date', state)
             }
