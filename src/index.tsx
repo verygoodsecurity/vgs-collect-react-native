@@ -10,6 +10,10 @@ export { default as VGSCVCInput } from './components/VGSCVCInput';
 export { default as ExpDateSeparateSerializer } from './utils/serializers/ExpDateSeparateSerializer';
 export { default as VGSCollectLogger } from './utils/logger/VGSCollectLogger';
 export { default as VGSTokenizationConfiguration } from './utils/tokenization/VGSTokenization';
+export {
+  VGSVaultStorageType,
+  VGSVaultAliasFormat,
+} from './utils/tokenization/TokenizationConfiguration';
 export type { VGSTextInputState } from './components/VGSTextInputState';
 export * from './utils/validators';
 export * from './utils/errors';

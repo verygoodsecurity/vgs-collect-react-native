@@ -28,8 +28,8 @@ if (process.env.NODE_ENV !== 'production') {
   VGSCollectLogger.getInstance().enable();
 }
 
-// Setup your vaultId and environment
-const collector = new VGSCollect('vaultId', 'sandbox');
+// Set your tenant ID and environment.
+const collector = new VGSCollect('tenantId', 'sandbox');
 // Tokenization API JWT token https://www.verygoodsecurity.com/docs/api/vault/#description/authentication-and-authorization
 const token = '<your_token_here>'
 

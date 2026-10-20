@@ -8,7 +8,7 @@ export enum VGSErrorCode {
   InputFileNotFound = 1101,
   // When file format not supported
   InputFileTypeIsNotSupported = 1102,
-  // When file size is larger then allowed limit
+  // When file size is larger than the allowed limit
   InputFileSizeExceedsTheLimit = 1103,
   // When can't get access to file source
   SourceNotAvailable = 1150,
@@ -24,6 +24,7 @@ export enum VGSErrorCode {
   // When form parameter is invalid.
   InvalidFormConfiguration = 1460,
   // When VGS config URL is not valid.
+  InvalidTenantConfiguration = 1470,
   InvalidVaultConfiguration = 1470,
   // When VGS config URL is not valid.
   InvalidConfigurationURL = 1480,

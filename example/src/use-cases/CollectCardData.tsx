@@ -26,8 +26,8 @@ if (process.env.NODE_ENV !== 'production') {
   VGSCollectLogger.getInstance().enable();
 }
 
-// TODO: Replace 'vaultId' with your actual Vault ID.
-const collector = new VGSCollect('vaultId', 'sandbox');
+// TODO: Replace 'tenantId' with your actual tenant ID.
+const collector = new VGSCollect('tenantId', 'sandbox');
 
 const CollectCardData = () => {
   const [formFieldsState, setFormFieldsState] = useState<{

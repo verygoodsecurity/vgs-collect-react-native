@@ -64,9 +64,17 @@ describe('VGSCollect', () => {
 
     it('should throw an error if routeId contains unsupported symbols', () => {
       const collect = new VGSCollect(tenantId, environment);
-      expect(() => collect.setRouteId('route_123')).toThrow(
-        'VGSCollect: Invalid routeId error'
-      );
+      try {
+        collect.setRouteId('route_123');
+        throw new Error('Expected route validation to fail');
+      } catch (error) {
+        expect(error).toBeInstanceOf(VGSError);
+        const sdkError = error as VGSError;
+        expect(sdkError.message).toBe('VGSCollect: Invalid routeId error');
+        expect(sdkError.code).toBe(VGSErrorCode.InvalidTenantConfiguration);
+        expect(sdkError.code).toBe(VGSErrorCode.InvalidVaultConfiguration);
+        expect(VGSErrorCode[sdkError.code]).toBe('InvalidVaultConfiguration');
+      }
     });
   });
 

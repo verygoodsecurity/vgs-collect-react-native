@@ -66,7 +66,7 @@ Recommended: install the skill with `skills.sh`. This is the easiest way to give
 The installed skill bundle includes `references/AGENTS.md`, and repository root `AGENTS.md` points to that same file, so a compatible skill-aware agent receives the durable integration policy automatically as part of the skill download without maintaining two copies.
 
 What the skill is useful for:
-- choosing the correct VGS Collect flow, such as proxy submission, tenant tokenization, alias creation, or card creation
+- choosing the correct VGS Collect flow, such as proxy submission, Vault API tokenization, alias creation, or card creation
 - asking a clarifying question when a card-entry request is ambiguous and the flow is not specified
 - steering non-card collection requests such as SSN or generic sensitive fields toward the correct field and tokenization APIs instead of card-specific ones
 - keeping generated guidance aligned with the installed package version when that version can be detected

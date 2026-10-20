@@ -132,7 +132,7 @@ const isResponseLike = (
  * Responsibilities:
  * - Field lifecycle: register/unregister, type-specific updates, brand-aware CVC adjustments.
  * - Validation: invokes per-field `getValidationErrors()` and throws `VGSError` on failures.
- * - Networking: builds vault or API URLs and performs `fetch` with analytics + custom headers.
+ * - Networking: builds tenant or API URLs and performs `fetch` with analytics + custom headers.
  * - Tokenization: collects configured fields and maps aliases back to original field keys.
  * - CNAME: optional custom hostname validation gated before any submission.
  */
@@ -171,9 +171,9 @@ class VGSCollect {
   private cachedJwtToken?: string;
 
   /**
-   * Creates a new collector bound to a Vault.
+   * Creates a collector for a tenant.
    *
-   * @param id - Vault ID, alphanumeric (e.g., `tnt12345`).
+   * @param id - Tenant identifier (`tenantId`, e.g., `tnt12345`).
    * @param environment - Deployment environment: `sandbox`, `live`, or `live-<region>`.
    * @throws {VGSError} When configuration is invalid (tenant or environment).
    */
@@ -209,21 +209,21 @@ class VGSCollect {
    * Creates a new collector instance with form configuration.
    *
    * @param form - Form identifier (e.g., `checkout-form`).
-   * @param vaultId - Vault ID (e.g., `tnt12345`).
+   * @param id - Tenant identifier (`tenantId`, e.g., `tnt12345`).
    * @param environment - Deployment environment: `sandbox`, `live`, or `live-<region>`.
    * @param options - Optional inline fallback configuration and remote-load error callback.
    * @returns Promise resolving to configured VGSCollect instance.
-   * @throws {VGSError} When form, vaultId, or environment is invalid.
+   * @throws {VGSError} When form, tenantId, or environment is invalid.
    */
   public static async session(
     form: string | null | undefined,
-    vaultId: string,
+    id: string,
     environment: string = 'sandbox',
     options: VGSCollectSessionOptions = {}
   ): Promise<VGSCollect> {
-    VGSCollect.validateConfig(vaultId, environment);
+    VGSCollect.validateConfig(id, environment);
     const collector = VGSCollect.createCollectorWithoutInitAnalytics(
-      vaultId,
+      id,
       environment
     );
     const normalizedForm =
@@ -246,7 +246,7 @@ class VGSCollect {
     try {
       const loadedConfig = await VGSCollect.loadConfiguration(
         normalizedForm,
-        vaultId
+        id
       );
       const config = VGSCollect.normalizeSessionConfigurationResult(
         normalizedForm,
@@ -294,10 +294,10 @@ class VGSCollect {
   }
 
   /**
-   * Sets the Vault Route ID to shape the base hostname.
+   * Sets the tenant route ID to shape the base hostname.
    * Host becomes `<tenantId>-<routeId>.<environment>.verygoodproxy.com`.
    *
-   * @param routeId - Route identifier configured in Vault.
+   * @param routeId - Route identifier configured for the tenant.
    *                  Allowed symbols: letters, numbers and `-`.
    * @throws {VGSError} If `routeId` is invalid.
    */
@@ -431,7 +431,7 @@ class VGSCollect {
    * Registers a field with the collector.
    * Typically invoked by SDK input components on mount.
    *
-   * @param fieldName - Unique field key matching Vault Route mapping (e.g., `pan`, `cvc`).
+   * @param fieldName - Unique field key matching tenant route mapping (e.g., `pan`, `cvc`).
    * @param getSubmitValue - Getter returning raw value or a serialized object (e.g., `{ month, year }`).
    * @param getValidationErrors - Getter returning validation messages; empty when valid.
    * @param tokenizationConfig - Optional config enabling tokenization for this field.
@@ -499,10 +499,10 @@ class VGSCollect {
   }
 
   /**
-   * Submits collected data to the Vault upstream.
+   * Submits collected data to the tenant upstream.
    * Validates fields, awaits CNAME validation, builds URL, then performs `fetch`.
    *
-   * @param path - API path under the Vault host (e.g., `/post`).
+   * @param path - API path under the tenant host (e.g., `/post`).
    * @param method - HTTP method, default `POST`.
    * @param extraData - Additional non-sensitive payload to merge.
    * @param customRequestStructure - Optional template object with `{{ fieldName }}` placeholders.
@@ -1298,7 +1298,7 @@ class VGSCollect {
   }
 
   /**
-   *  Collects submit data form fields, handling asynchronous operations.
+   *  Collects submit data from fields, handling asynchronous operations.
    * @returns {Promise<Record<string, any>>} An object containing the field data.
    */
   private async collectFieldData(): Promise<Record<string, any>> {
@@ -1539,6 +1539,7 @@ class VGSCollect {
   }
 
   BASE_VAULT_URL = 'verygoodproxy.com';
+
   private buildUrl(baseDomain: string, path: string = ''): string {
     const baseUrl = this.cname
       ? `https://${this.cname.replace(/\/+$/, '')}`
@@ -2155,9 +2156,9 @@ class VGSCollect {
     return normalizedForm.length > 0 ? normalizedForm : null;
   }
 
-  private static buildSessionConfigUrl(form: string, vaultId: string): string {
+  private static buildSessionConfigUrl(form: string, tenantId: string): string {
     const configFileName = VGSCollect.getCollectS3FileName(form);
-    return `https://js.verygoodvault.com/session-configuration/${vaultId}/${configFileName}.json`;
+    return `https://js.verygoodvault.com/session-configuration/${tenantId}/${configFileName}.json`;
   }
 
   private static encodeUtf8Hex(value: string): string {
@@ -2221,14 +2222,14 @@ class VGSCollect {
    * Loads configuration for a given form.
    * Fetches the remote session configuration over HTTPS.
    * @param form - Form identifier.
-   * @param vaultId - Vault ID.
+   * @param tenantId - Tenant ID.
    * @returns Promise resolving to configuration object.
    */
   private static async loadConfiguration(
     form: string,
-    vaultId: string
+    tenantId: string
   ): Promise<SessionConfigurationLoadResult> {
-    const url = VGSCollect.buildSessionConfigUrl(form, vaultId);
+    const url = VGSCollect.buildSessionConfigUrl(form, tenantId);
     const configFile = `${VGSCollect.getCollectS3FileName(form)}.json`;
     const startedAt = Date.now();
     let response: unknown;
@@ -2376,12 +2377,12 @@ class VGSCollect {
   }
 
   private static createCollectorWithoutInitAnalytics(
-    vaultId: string,
+    tenantId: string,
     environment: string
   ): VGSCollect {
     VGSCollect.suppressCreateInitAnalytics = true;
     try {
-      return new VGSCollect(vaultId, environment);
+      return new VGSCollect(tenantId, environment);
     } finally {
       VGSCollect.suppressCreateInitAnalytics = false;
     }

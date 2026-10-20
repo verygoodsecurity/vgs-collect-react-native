@@ -73,6 +73,7 @@ First-time package adoption.
 - confirm package is not already present
 - pick the supported installation method for the resolved version and the customer's project setup
 - establish baseline collector setup and prerequisites
+- use tenant names for collector configuration; keep Vault API storage and alias-format terminology
 
 ### `implement`
 Add or change supported functionality.

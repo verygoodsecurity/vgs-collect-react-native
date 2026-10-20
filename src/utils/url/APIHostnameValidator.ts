@@ -23,7 +23,7 @@ class APIHostnameValidator {
    * Logs errors via `VGSCollectLogger` when invalid.
    *
    * @param hostname - Candidate CNAME hostname provided by the integrator.
-   * @param tenantId - Vault tenant ID used to construct validation URL.
+   * @param tenantId - Tenant ID used to construct the validation URL.
    * @returns `true` if validation succeeds, `false` otherwise.
    */
   static async validateCustomHostname(

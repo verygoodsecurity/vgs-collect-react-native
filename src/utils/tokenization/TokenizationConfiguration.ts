@@ -4,17 +4,17 @@ import type { VGSInputType } from '../../components/VGSInputType';
  * Provides `storage` policy and alias `format`.
  */
 export interface VGSTokenizationConfiguration {
-  storage?: VGSVaultStorageType; // Add vault storage type
-  format?: VGSVaultAliasFormat; // Add alias format
+  storage?: VGSVaultStorageType;
+  format?: VGSVaultAliasFormat;
 }
 
-/** Enum for VaultStorageType. Details: https://www.verygoodsecurity.com/docs/vault/concepts/tokens#retention-policies */
+/** Storage policies. Details: https://www.verygoodsecurity.com/docs/vault/concepts/tokens#retention-policies */
 export enum VGSVaultStorageType {
   PERSISTENT = 'PERSISTENT',
   VOLATILE = 'VOLATILE',
 }
 
-/** Enum for VaultAliasFormat. Details: https://www.verygoodsecurity.com/docs/vault/concepts/tokens#alias-formats */
+/** Alias formats. Details: https://www.verygoodsecurity.com/docs/vault/concepts/tokens#alias-formats */
 export enum VGSVaultAliasFormat {
   FPE_ACC_NUM_T_FOUR = 'FPE_ACC_NUM_T_FOUR',
   FPE_ALPHANUMERIC_ACC_NUM_T_FOUR = 'FPE_ALPHANUMERIC_ACC_NUM_T_FOUR',
