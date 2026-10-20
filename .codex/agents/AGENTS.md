@@ -27,6 +27,7 @@ If contributor guidance conflicts with integration behavior constraints, preserv
 
 - Root `AGENTS.md` is consumer-facing guidance, not contributor workflow documentation.
 - Root `.agents/` is an install artifact and must not be committed in this repository.
+- Do not commit files under `.spec/`, `.specs/`, `contract/`, or `contracts/` unless the user explicitly requests those artifacts. A request to create a commit or pull request does not authorize these files. Check the staged paths before each commit.
 - Never hand-edit generated `docs/**` files; update the source content that feeds doc generation instead.
 - Keep contributor guidance centralized under `.codex/agents/**`.
 - Keep the public skill aligned with `../../AGENTS.md` whenever flow selection, version-source rules, or customer-facing integration guidance changes.

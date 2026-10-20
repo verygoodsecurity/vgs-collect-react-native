@@ -153,6 +153,7 @@ Create Secure Input Fields:
   fieldName="card_holder"
   type="cardHolderName"
   placeholder="Name"
+  autoCapitalize="words"
   onStateChange={handleFieldStateChange}
 />
 ```
@@ -196,6 +197,7 @@ const handleSubmit = async () => {
 };
 ```
 Each input must use a `fieldName` that matches the field key in the tenant route configuration. VGS uses this key for redact and reveal operations.
+For `tokenize()` and `createAliases()`, configure the `tokenization` prop on card and CVC inputs to receive aliases. Non-tokenized card and CVC values are omitted.
 
 ### Card Attributes Lookup Response
 

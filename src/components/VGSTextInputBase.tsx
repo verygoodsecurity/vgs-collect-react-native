@@ -5,7 +5,7 @@ import React, {
   forwardRef,
 } from 'react';
 import { TextInput, View, StyleSheet } from 'react-native';
-import type { AccessibilityRole } from 'react-native';
+import type { AccessibilityRole, TextInputProps } from 'react-native';
 import VGSCollect from '../collector/VGSCollect';
 import { type ValidationRule } from '../utils/validators/Validator';
 import {
@@ -103,6 +103,8 @@ export interface VGSTextInputProps {
    * Whether the input field should enable auto-correction.
    */
   autoCorrect?: boolean;
+  /** Controls automatic capitalization in the native text input. */
+  autoCapitalize?: TextInputProps['autoCapitalize'];
   /**
    * Style for the container view.
    */
@@ -213,6 +215,7 @@ export const VGSTextInputBase = forwardRef<VGSTextInputRef, VGSTextInputProps>((
     divider,
     secureTextEntry = false,
     autoCorrect = false,
+    autoCapitalize,
     containerStyle,
     tokenization = false,
     textStyle: inputTextStyle,
@@ -446,6 +449,7 @@ export const VGSTextInputBase = forwardRef<VGSTextInputRef, VGSTextInputProps>((
         keyboardType={keyboardType}
         secureTextEntry={secureTextEntry}
         autoCorrect={autoCorrect}
+        autoCapitalize={autoCapitalize}
         style={inputTextStyle}
         ref={textInputRef}
         testID={testID}

@@ -48,7 +48,7 @@ class ExpDateSeparateSerializer implements VGSSerializer {
     } else {
       VGSCollectLogger.getInstance().log({
         logLevel: VGSLogLevel.WARNING,
-        text: `Invalid expiration date format: ${value}. Can not separate month and year.`,
+        text: 'Invalid expiration date format. Cannot separate month and year.',
         severity: VGSLogSeverity.ERROR,
       });
       month = '';

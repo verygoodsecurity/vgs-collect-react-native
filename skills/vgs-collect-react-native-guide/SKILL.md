@@ -80,6 +80,9 @@ Add or change supported functionality.
 - generate code with explicit validation and `VGSError` handling
 - use placeholders only for secrets, identifiers, endpoints, and env values the user has not supplied
 - for card creation, pass card attributes in `extraData` and custom string metadata in the separate `meta` argument
+- for `tokenize` and `createAliases`, successful results include aliases and non-tokenized submitted values, including serializer output keys; non-tokenized `card` and `cvc` fields are excluded
+- configure `tokenization` for `card` and `cvc` fields to receive aliases; use `tokenization={false}` for plain values from other field types; never log or persist sensitive values from the result
+- use `autoCapitalize="words"` for cardholder inputs when the app needs word capitalization
 - for CMP flows, configure a session and an auth handler; pass extra card attributes directly to `createCard`
 - accept a raw JWT or `Bearer <token>` from auth handlers; explain the single retry after HTTP 401/403 and no automatic refresh for explicit-token calls
 - for card attributes lookup, treat `setDidRetrieveCardAttributes` as the complete parsed backend response; preserve any `data` wrapper and backend-defined nested structure

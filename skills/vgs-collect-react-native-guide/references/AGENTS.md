@@ -65,6 +65,8 @@ You do NOT call `registerField` directly—components do. Use component props:
 - `mask`: Optional custom mask (use with caution; defaults chosen for security/usability).
 - `validationRules`: Replace defaults entirely when supplied (must re-provide any needed built-ins like Luhn or expiration date rules).
 - `maxLength`: Optional max character count passed to the underlying React Native TextInput.
+- `autoCapitalize`: Optional native capitalization mode: `none`, `sentences`, `words`, or `characters`. Use `words` for cardholder names.
+- `tokenization`: Supply a tokenization configuration for aliases, or `false` for submitted values from other field types. Non-tokenized `card` and `cvc` values are excluded.
 - `onStateChange`: Callback receiving `VGSTextInputState` for UI validity feedback (never persist raw values from state).
 
 Components:
@@ -108,8 +110,8 @@ Errors surfaced on submit via thrown `VGSError` with `code === VGSErrorCode.Inpu
 Methods on `VGSCollect`:
 - `VGSCollect.session(form, vaultId, environment?, options?)`: Loads remote form configuration. Remote configuration wins; on load failure the Promise still resolves with a collector using `options.configuration` when supplied, and calls `options.onError`.
 - `submit(path?: string, method?: string, extraData?: Record<string,any>, customRequestStructure?: Record<string,any>)`: Validates fields, constructs URL, merges extraData. Returns `{status, response}` where `response` is the Fetch Response object. Parse JSON cautiously (may be empty on some error codes).
-- `tokenize()`: Tokenizes fields configured with `tokenizationConfig`; returns `{ status, data }` where `data` is alias mapping.
-- `createAliases()`: Similar to `tokenize()` but uses newer Vault API version (`v2`). Keep alias ordering assumptions intact—never reorder collected data.
+- `tokenize()`: Tokenizes fields with tokenization enabled. Returns `{ status, data }` with aliases and submitted values for non-tokenized fields. Serializer output retains its configured keys. Non-tokenized `card` and `cvc` fields are excluded.
+- `createAliases()`: Uses Vault API `v2` and returns the same result shape as `tokenize()`. Keep alias ordering intact.
 - `createCard(extraData?: Record<string,any>, meta?: Record<string,string>)`: Uses `authHandler` to fetch a JWT, validates fields, and creates a card. Pass card attributes in `extraData` and custom string metadata in `meta`. Use MM/YY for expiration inputs.
 - `createCardWithToken(token, extraData?, meta?)` and `createCard(token, extraData?, meta?)`: Create a card with an explicit access token. Pass custom string metadata as the third argument.
 - `updateCard(cardId, extraData?: Record<string,any>)`: Uses `authHandler` to PATCH populated CVC and/or MM/YY expiration values. CMP accepts only `cvc`, `exp_month`, and `exp_year`; at least one must be present. It shares the token cache and one-refresh behavior.
@@ -122,8 +124,14 @@ CMP field contract:
 - User-defined card metadata belongs in `data.meta`, not in update attributes.
 - Canonical CMP field names are independent of configurable Vault Route field names. Prefer the `VGSTextInput.CardNumber`, `.ExpDate`, `.CVC`, and `.CardHolder` convenience inputs, which supply the canonical defaults.
 
+Tokenization results include non-tokenized submitted values automatically, except for `card` and `cvc` fields.
+Configure the `tokenization` prop on card and CVC inputs to receive aliases.
+Set `tokenization={false}` to return submitted values from other field types.
+Only tokenized fields are sent to the Vault API. With no tokenized fields, both methods return status `200` without a Vault API request.
+All registered fields must pass validation. Never log or persist sensitive values from the result.
+
 Tokenization Field Setup:
-Use `tokenizationConfig` prop inside component (if exposed) or future adapter logic: object implementing `{ storage, format }`. For expiration date with `ExpDateSeparateSerializer` you receive `exp_month` and `exp_year` pieces; mapping preserved automatically.
+Use the `tokenization` prop on the input component: object implementing `{ storage, format }`. For expiration date with `ExpDateSeparateSerializer` you receive `exp_month` and `exp_year` pieces; mapping preserved automatically.
 
 Custom Request Structure Example:
 ```tsx
@@ -198,8 +206,8 @@ Add Card Form:
 4. On submit call `collector.submit('/post')` and process response.
 
 Add Tokenization Flow:
-1. Provide `tokenizationConfig` for fields needing aliases (e.g. card number). Storage & format reflect desired alias output.
-2. Call `collector.tokenize()`; receive mapping `{'pan': 'tok_...'}` or for serialized expiration `{'exp_month': 'tok_', 'exp_year': 'tok_'}`.
+1. Set the `tokenization` prop for fields that require aliases, such as the card number. Select the required storage and format.
+2. Call `collector.tokenize()`; receive aliases and non-tokenized submitted values, for example `{'pan': 'tok_...'}` or for serialized expiration `{'exp_month': 'tok_', 'exp_year': 'tok_'}`.
 
 Custom Expiration Serializer:
 ```tsx
@@ -207,11 +215,11 @@ Custom Expiration Serializer:
   collector={collector}
   fieldName="expDate"
   type="expDate"
-  serializer={new ExpDateSeparateSerializer()}
+  serializers={[new ExpDateSeparateSerializer('exp_month', 'exp_year')]}
   onStateChange={...}
 />
 ```
-(Ensure serializer prop is supported; if not documented publicly, refrain.)
+Use the `serializers` prop to supply expiration serializers.
 
 Card Management (create card):
 ```tsx
@@ -404,6 +412,7 @@ try {
 Tokenize:
 ```tsx
 const { status, data } = await collector.tokenize();
+// Successful data can contain aliases and non-tokenized submitted values.
 // data: { pan: 'tok_...', exp_month: 'tok_...' }
 ```
 Create Card:
