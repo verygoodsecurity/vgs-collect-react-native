@@ -1,6 +1,6 @@
 # AGENTS.md
 
-**Package Version: 1.3.0**
+**Package Version: 1.2.2**
 
 This guide is tailored for autonomous engineering agents integrating `@vgs/collect-react-native` into React Native applications. It focuses on deterministic, automatable steps: environment assessment, field setup, secure submission and tokenization flows, privacy compliance, testing, maintenance, and safe upgrade workflows.
 
