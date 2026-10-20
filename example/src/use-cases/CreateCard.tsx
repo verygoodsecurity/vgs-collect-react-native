@@ -47,9 +47,11 @@ const CreateCard = () => {
     const initCollector = async () => {
       try {
         const formName = process.env.EXPO_PUBLIC_VGS_FORM_NAME;
-        const vaultId = process.env.EXPO_PUBLIC_VGS_VAULT_ID;
+        const tenantId =
+          process.env.EXPO_PUBLIC_VGS_TENANT_ID ??
+          process.env.EXPO_PUBLIC_VGS_VAULT_ID;
 
-        if (!formName || !vaultId) {
+        if (!formName || !tenantId) {
           throw new Error(
             'Missing EXPO_PUBLIC_VGS_FORM_NAME or EXPO_PUBLIC_VGS_VAULT_ID'
           );
@@ -57,7 +59,7 @@ const CreateCard = () => {
 
         // Pass `undefined` or blank form only when you intentionally want to skip
         // remote session config loading and card-attributes lookup configuration.
-        const collect = await VGSCollect.session(formName, vaultId, 'sandbox');
+        const collect = await VGSCollect.session(formName, tenantId, 'sandbox');
 
         // Configure auth handler for createCard() and card attributes lookup.
         collect.setAuthHandler(async () => {
@@ -222,7 +224,7 @@ const CreateCard = () => {
           case VGSErrorCode.InvalidFormConfiguration:
             console.error('Invalid form configuration. Check form name and try again.');
             break;
-          case VGSErrorCode.InvalidVaultConfiguration:
+          case VGSErrorCode.InvalidTenantConfiguration:
             console.error('Invalid vault configuration. Check vaultId/environment.');
             break;
           case VGSErrorCode.SessionInitializationFailed:

@@ -16,7 +16,7 @@ class FormAnalyticsDetails {
   /**
    * Creates a new form analytics details object.
    *
-   * @param tenantId - Vault tenant identifier.
+   * @param tenantId - Tenant identifier.
    * @param environment - Environment label (`sandbox`, `live`, `live-<region>`).
    */
   constructor(

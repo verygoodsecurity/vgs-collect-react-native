@@ -20,7 +20,7 @@ If contributor guidance conflicts with integration behavior constraints, preserv
 1. Read `ARCHITECTURE.md` before making path or ownership claims.
 2. Read `.codex/agents/README.md` before non-trivial maintenance work.
 3. Read `../../AGENTS.md` when a change affects customer-facing behavior, validation, privacy, version guidance, or public integration flows.
-4. For public integration behavior changes, update `skills/vgs-collect-react-native-guide/SKILL.md`, `skills/vgs-collect-react-native-guide/references/AGENTS.md`, and `README.md` in the same change.
+4. For public integration behavior changes, update `skills/vgs-collect-react-native-guide/SKILL.md` and `skills/vgs-collect-react-native-guide/references/AGENTS.md`. Update `README.md` only when its existing setup or usage guidance needs a change.
 5. If the public skill path, name, or layout changes, update `.github/workflows/validate-skills.yml` in the same change.
 
 ## Contributor Rules
