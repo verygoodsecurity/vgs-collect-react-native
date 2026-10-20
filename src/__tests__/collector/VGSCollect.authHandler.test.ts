@@ -514,7 +514,7 @@ describe('VGSCollect - Auth Handler & JWT Token Management', () => {
             caller: 'preserved',
             _source: 'vgs-collect',
             _medium: platformSdkIdentifier,
-            _version: '1.2.1',
+            _version: '1.3.0',
           },
         },
       });
@@ -554,7 +554,7 @@ describe('VGSCollect - Auth Handler & JWT Token Management', () => {
           meta: expect.objectContaining({
             _source: 'vgs-collect',
             _medium: platformSdkIdentifier,
-            _version: '1.2.1',
+            _version: '1.3.0',
           }),
         },
       });
@@ -749,7 +749,7 @@ describe('VGSCollect - Auth Handler & JWT Token Management', () => {
         source: 'mobile',
         _source: 'vgs-collect',
         _medium: platformSdkIdentifier,
-        _version: '1.2.1',
+        _version: '1.3.0',
       });
     });
 
@@ -1035,7 +1035,7 @@ describe('VGSCollect - Auth Handler & JWT Token Management', () => {
           ...meta,
           _source: 'vgs-collect',
           _medium: 'rnSDK',
-          _version: '1.2.1',
+          _version: '1.3.0',
         });
         expect(submit.mock.calls[0]![3].content).toEqual([
           'textField',
@@ -1108,7 +1108,7 @@ describe('VGSCollect - Auth Handler & JWT Token Management', () => {
         _formId: 'legacy-form',
         _source: 'vgs-collect',
         _medium: 'rnSDK',
-        _version: '1.2.1',
+        _version: '1.3.0',
       });
       expect(extraData.data.meta.orderId).toBe(7);
     });

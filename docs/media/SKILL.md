@@ -73,13 +73,19 @@ First-time package adoption.
 - confirm package is not already present
 - pick the supported installation method for the resolved version and the customer's project setup
 - establish baseline collector setup and prerequisites
+- use tenant names for collector configuration; keep Vault API storage and alias-format terminology
 
 ### `implement`
 Add or change supported functionality.
 - implement in the customer's app context, not a generic snippet
 - generate code with explicit validation and `VGSError` handling
 - use placeholders only for secrets, identifiers, endpoints, and env values the user has not supplied
-- for CMP flows, preserve the documented session fallback and shared auth-handler token lifecycle; do not cache tokens from handlers replaced while their request was pending; reuse the original validated request payload when refreshing authorization after 401/403; pass `createCard` extra attributes directly, accepting the wrapped `{ data: { attributes } }` form only for migration compatibility
+- for card creation, pass card attributes in `extraData` and custom string metadata in the separate `meta` argument
+- for `tokenize` and `createAliases`, successful results include aliases and non-tokenized submitted values, including serializer output keys; non-tokenized `card` and `cvc` fields are excluded
+- configure `tokenization` for `card` and `cvc` fields to receive aliases; use `tokenization={false}` for plain values from other field types; never log or persist sensitive values from the result
+- use `autoCapitalize="words"` for cardholder inputs when the app needs word capitalization
+- for CMP flows, configure a session and an auth handler; pass extra card attributes directly to `createCard`
+- accept a raw JWT or `Bearer <token>` from auth handlers; explain the single retry after HTTP 401/403 and no automatic refresh for explicit-token calls
 - for card attributes lookup, treat `setDidRetrieveCardAttributes` as the complete parsed backend response; preserve any `data` wrapper and backend-defined nested structure
 
 ### `migrate`
@@ -107,9 +113,9 @@ A task may have a secondary mode, but the primary mode controls planning and out
 ## Output contract
 
 Begin every response by stating which version the guidance is based on, using one of:
-- `Using bundled @vgs/collect-react-native 1.2.1 guidance.`
-- `Detected @vgs/collect-react-native 1.2.1 from package.json; it matches the bundled guidance.`
-- `Detected @vgs/collect-react-native <resolved-version>, but this skill bundles 1.2.1 guidance and may be outdated. Run npx skills check, then npx skills update.`
-- `Could not determine the installed @vgs/collect-react-native version; using the bundled 1.2.1 snapshot without claiming it is latest.`
+- `Using bundled @vgs/collect-react-native 1.3.0 guidance.`
+- `Detected @vgs/collect-react-native 1.3.0 from package.json; it matches the bundled guidance.`
+- `Detected @vgs/collect-react-native <resolved-version>, but this skill bundles 1.3.0 guidance and may be outdated. Run npx skills check, then npx skills update.`
+- `Could not determine the installed @vgs/collect-react-native version; using the bundled 1.3.0 snapshot without claiming it is latest.`
 
 Then proceed within the bundled snapshot and version-freshness rules above.
